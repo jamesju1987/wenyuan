@@ -1,0 +1,3 @@
+# 压缩包：7z、AES 加密的 zip（可选组件，约 10 MB；装不上时 zip/tar 照常解压，7z/rar 交给本机已装的 7-Zip）
+py7zr>=0.20
+pyzipper>=0.3.6

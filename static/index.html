@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文渊</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-overview" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></symbol>
+  <symbol id="i-review" viewBox="0 0 24 24"><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="M3.8 6.5l1.4 1.4L7.6 5.3M3.8 12l1.4 1.4 2.4-2.6"/><circle cx="5.6" cy="17.5" r="1.3"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="17" height="11.5" rx="2"/><path d="M8.5 7.5V6a1.5 1.5 0 0 1 1.5-1.5h4A1.5 1.5 0 0 1 15.5 6v1.5M3.5 12.5h17"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 3.2l1.5 2.3 2.7-.6.6 2.7 2.3 1.5-1.2 2.4 1.2 2.4-2.3 1.5-.6 2.7-2.7-.6L12 20.8l-1.5-2.3-2.7.6-.6-2.7-2.3-1.5 1.2-2.4-1.2-2.4 2.3-1.5.6-2.7 2.7.6z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-tray" viewBox="0 0 24 24"><path d="M3.5 14.5h4.2l1.3 2.5h6l1.3-2.5h4.2V18a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 14.5l2.2-6.5a2 2 0 0 1 1.9-1.4H8M20.5 14.5l-2.2-6.5a2 2 0 0 0-1.9-1.4H16"/><path d="M12 3.5v8.5M9 9l3 3 3-3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4.5 9.5 9 5"/><path d="M4.5 9.5H14a5.5 5.5 0 0 1 0 11h-3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 15.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2.5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M11 3.5l1.7 4.6 4.6 1.7-4.6 1.7L11 16.1l-1.7-4.6-4.6-1.7 4.6-1.7z"/><path d="M18 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 24 24"><path d="M4 5.5h3.5l5 6.5H20M4 18.5h3.5l5-6.5"/><path d="M16.5 8.5 20 12l-3.5 3.5"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1.2"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></symbol>
+  <symbol id="i-warning" viewBox="0 0 24 24"><path d="M12 4.2l8.8 15.3H3.2z"/><path d="M12 10v4.5M12 17v.2"/></symbol>
+  <symbol id="i-question" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.7v.2"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13"/><path d="M17.5 13.5V18a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4.5"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M4.5 20.5V6A1.5 1.5 0 0 1 6 4.5h7A1.5 1.5 0 0 1 14.5 6v14.5M14.5 10.5H18a1.5 1.5 0 0 1 1.5 1.5v8.5M3 20.5h18M8 8.5h3M8 12h3M8 15.5h3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-docs" viewBox="0 0 24 24"><path d="M7 3.5h7l4.5 4.5v10.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z"/><path d="M14 3.5V8h4.5M8.5 12.5h6M8.5 16h6"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l4.8-4.3 3.4 3 3-2.6 4.6 4"/></symbol>
+</svg>
+
+<div class="window">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-icon" src="/static/icon.svg" alt="">
+      <div><b>文渊</b><small>项目文件智能归档</small></div>
+    </div>
+    <div class="nav-section">整理</div>
+    <a class="nav-item" data-route="overview"><svg class="i"><use href="#i-overview"/></svg><span>概览</span></a>
+    <a class="nav-item" data-route="review"><svg class="i"><use href="#i-review"/></svg><span>待复核</span><em class="badge" id="badge-review"></em></a>
+    <a class="nav-item" data-route="activity"><svg class="i"><use href="#i-activity"/></svg><span>处理记录</span></a>
+    <div class="nav-section">资料库</div>
+    <a class="nav-item" data-route="library"><svg class="i"><use href="#i-folder"/></svg><span>归档库</span><em class="badge" id="badge-files"></em></a>
+    <a class="nav-item" data-route="projects"><svg class="i"><use href="#i-briefcase"/></svg><span>项目</span><em class="badge" id="badge-projects"></em></a>
+    <div class="nav-section">系统</div>
+    <a class="nav-item" data-route="settings"><svg class="i"><use href="#i-gear"/></svg><span>设置</span></a>
+    <div class="sidebar-foot">
+      <div class="watch-pill"><span class="dot" id="watch-dot"></span><div><span id="watch-text">正在连接…</span><span class="path" id="watch-path"></span></div></div>
+      <div class="ai-pills"><span class="ai-pill" id="pill-jev">Jev</span><span class="ai-pill" id="pill-ds">DeepSeek</span><span class="ai-pill" id="pill-ocr" title="图片与扫描件文字识别">OCR</span></div>
+    </div>
+  </aside>
+  <main>
+    <header class="toolbar">
+      <div class="titles"><h1 id="tb-title">概览</h1><div class="sub" id="tb-sub"></div></div>
+      <div class="spacer"></div>
+      <div class="actions" id="tb-actions"></div>
+      <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="search" placeholder="搜索归档文件" autocomplete="off"><kbd>⌘F</kbd></label>
+    </header>
+    <section class="content" id="content"></section>
+  </main>
+</div>
+<div class="toasts" id="toasts"></div>
+<div class="dropmask hidden" id="dropmask"><div><svg class="i"><use href="#i-tray"/></svg>松开即可识别并归档</div></div>
+<input type="file" id="file-input" multiple class="hidden">
+<script src="/static/app.js"></script>
+</body>
+</html>

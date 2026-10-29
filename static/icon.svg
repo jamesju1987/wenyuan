@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><linearGradient id="wy-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2A3846"/><stop offset="1" stop-color="#18212A"/></linearGradient></defs>
+  <rect width="64" height="64" rx="14" fill="url(#wy-bg)"/>
+  <path d="M21.4 12.4H42.6C46.4 17.6 51.6 21.2 58.6 20.6 56 24.4 52.6 26.8 48.4 27.2H15.6C11.4 26.8 8 24.4 5.4 20.6 12.4 21.2 17.6 17.6 21.4 12.4Z" fill="#F2F5F7"/>
+  <rect x="13" y="31.5" width="8" height="19" rx="1.4" fill="#4FA393"/>
+  <rect x="23" y="31.5" width="8" height="19" rx="1.4" fill="#E0503E"/>
+  <rect x="33" y="31.5" width="8" height="19" rx="1.4" fill="#B3CDE6"/>
+  <rect x="43" y="31.5" width="8" height="19" rx="1.4" fill="#8F8A82"/>
+  <rect x="9.5" y="52" width="45" height="2.8" rx="1.2" fill="#F2F5F7"/>
+</svg>
