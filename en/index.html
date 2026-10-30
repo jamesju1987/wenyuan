@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wenyuan: project files, filed for you</title>
+<meta name="description" content="Wenyuan works out which client, project and deliverable each file belongs to, renames it to one standard and files it into client, project and stage folders. Runs on your own computer. Free for Windows and macOS.">
+<meta name="theme-color" content="#111921">
+<link rel="canonical" href="https://jamesju1987.github.io/wenyuan/en/">
+<link rel="alternate" hreflang="zh-CN" href="https://jamesju1987.github.io/wenyuan/">
+<link rel="alternate" hreflang="en" href="https://jamesju1987.github.io/wenyuan/en/">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="icon" href="../assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Wenyuan: every project, its own library">
+<meta property="og:description" content="Wenyuan works out which client, project and deliverable each file belongs to, renames it to one standard and files it into client, project and stage folders. Runs on your own computer. Free for Windows and macOS.">
+<meta property="og:image" content="https://jamesju1987.github.io/wenyuan/assets/og-en.png">
+<meta property="og:url" content="https://jamesju1987.github.io/wenyuan/en/">
+<link rel="preload" href="../assets/fonts/wy-latin-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/site.css?v=1.6.1">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body class="en">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="Wenyuan home"><img src="../assets/logo.svg" width="28" height="28" alt=""><span class="bn">Wenyuan</span><span class="bs">文渊</span></a>
+    <nav class="nav-links" aria-label="Page sections"><a href="#features">Features</a><a href="#how">How it works</a><a href="#story">The name</a><a href="#download">Download</a><a href="#faq">FAQ</a></nav>
+    <a class="lang" href="../" hreflang="zh-CN" lang="zh-CN" title="简体中文">中文</a>
+    <a class="btn btn-sm nav-dl" href="#download">Download</a>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" id="top">
+  <div class="tiles" aria-hidden="true"></div>
+  <div class="wrap hero-in">
+    <img class="emblem" src="../assets/mark-mono.svg" width="76" height="62" alt="">
+    <h1 class="display"><span class="ln">Every project,</span><span class="ln">its own library.</span></h1>
+    <p class="lede">Hand Wenyuan a file. It works out which client, project and deliverable it belongs to, renames it to one consistent standard, and files it into the right stage folder. It only asks when it isn’t sure, and it all happens on your own computer.</p>
+    <div class="cta">
+      <a class="btn btn-paper" href="../download/Wenyuan-1.6.1.zip" download>Download Wenyuan 1.6.1</a>
+      <a class="btn btn-ghost" href="#how">See how it works</a>
+    </div>
+    <p class="fine">Free. Windows 10/11 and macOS, with Python 3.9 or later. The app’s interface is in Simplified Chinese.</p>
+  </div>
+  <div class="wrap demo-wrap">
+    <figure class="demo" id="demo" aria-label="Demo: a badly named file is recognised, renamed and filed into the project’s deliverables folder">
+      <div class="demo-col">
+        <div class="demo-head"><span>A file just landed in the inbox</span><button type="button" class="replay" id="replay" hidden>Play again</button></div>
+        <div class="d-file d-in"><span class="ftag">DOC</span><span class="fn">最终版(2)-评估报告-改.docx</span></div>
+        <ul class="d-steps"><li class="s1"><b>Client</b><span>The text names 青岚医疗集团有限公司</span></li><li class="s2"><b>Project</b><span>Two active projects for this client; the data-security one fits: PRJ-2026-0118</span></li><li class="s3"><b>Type</b><span>Data security assessment report, type code RPT-DSA</span></li><li class="s4"><b>Title</b><span>The file name is too vague, so the document’s own heading is used</span></li><li class="s5"><b>Date</b><span>Signed off on 20 October 2026</span></li></ul>
+      </div>
+      <div class="demo-col demo-right">
+        <div class="demo-head"><span>Filed as</span></div>
+        <div class="d-file d-out"><span class="ftag">DOC</span><span class="fn mono">PRJ-2026-0118_RPT-DSA_青岚医疗数据安全风险评估报告_V1.0_正式_20261020.docx</span></div>
+        <div class="d-tree">
+          <div class="t t0">项目归档库</div>
+          <div class="t t1">青岚医疗_C0002</div>
+          <div class="t t2">PRJ-2026-0118_数据安全评估</div>
+          <div class="t t3"><span>04_交付成果</span><em class="land">Filed</em></div>
+        </div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section class="pillars" id="features" aria-labelledby="pillars-h">
+  <div class="wrap">
+    <header class="sec-head"><h2 class="display" id="pillars-h"><span class="ln">Hand it the file.</span><span class="ln">It does the rest.</span></h2><p>Every file goes through the same four steps. The reasoning is always on show, and whenever a step is uncertain, it stops and asks.</p></header>
+    <div class="cases"><article class="case c-qing"><div class="case-box" aria-hidden="true"><span class="slip">认</span></div><h3>Recognise</h3><p>Project numbers first, then client names and aliases, then deliverable keywords. When a client has several active projects, business line and project keywords decide. Photos and scans are read on your machine first.</p></article><article class="case c-chi"><div class="case-box" aria-hidden="true"><span class="slip">名</span></div><h3>Name</h3><p>Project number, type code, title, version, status and date, in that order, every time. Noise like “final”, “(2)” or “edited” is stripped. Drop in a newer copy and the version goes up; the old one moves to the history folder.</p></article><article class="case c-yuebai"><div class="case-box" aria-hidden="true"><span class="slip">收</span></div><h3>Collect</h3><p>Drag files into the page, drop them in the inbox folder, use right-click Send to on Windows, or let it pick up files you receive in WeChat and WeCom. Archives are unpacked and filed one by one.</p></article><article class="case c-huihei"><div class="case-box" aria-hidden="true"><span class="slip">找</span></div><h3>Find</h3><p>Browse client, project and stage in columns, like a bookshelf. Search tolerates gaps between characters, and project pickers accept pinyin initials.</p></article></div>
+  </div>
+</section>
+
+<section class="anatomy" id="naming" aria-labelledby="naming-h">
+  <div class="wrap">
+    <header class="sec-head"><h2 class="display" id="naming-h"><span class="ln">One file name.</span><span class="ln">Six facts.</span></h2><p>Whoever files it, it comes out the same. No more renaming or reconciling versions at hand-over or audit time.</p></header>
+    <div class="fname-anatomy" role="list"><span class="seg" role="listitem"><code>PRJ-2026-0118</code><small><b>Project number</b>From your CRM; a match locks the project</small></span><span class="us" aria-hidden="true">_</span><span class="seg" role="listitem"><code>RPT-DSA</code><small><b>Type code</b>31 built-in deliverable types, and your own</small></span><span class="us" aria-hidden="true">_</span><span class="seg seg-wide" role="listitem"><code>青岚医疗数据安全风险评估报告</code><small><b>Title</b>Client short name plus subject, 30 characters at most</small></span><span class="us" aria-hidden="true">_</span><span class="seg" role="listitem"><code>V1.0</code><small><b>Version</b>Drafts are V0.x; the first formal release is V1.0</small></span><span class="us" aria-hidden="true">_</span><span class="seg" role="listitem"><code>正式</code><small><b>Status</b>Draft, internal review, client review, final, signed</small></span><span class="us" aria-hidden="true">_</span><span class="seg" role="listitem"><code>20261020<span class="ext">.docx</span></code><small><b>Date</b>The document’s own sign-off date</small></span></div>
+    <div class="tree-wrap">
+      <div class="tree">
+        <div class="tr d0"><span class="tn">项目归档库</span></div>
+        <div class="tr d1"><span class="tn">青岚医疗_C0002</span><span class="tc">client short name_client code</span></div>
+        <div class="tr d2"><span class="tn">PRJ-2026-0118_数据安全评估</span><span class="tc">project number_project short name</span></div>
+        <div class="tr d3 stages"><span class="tn">00_项目管理</span><span class="tn">01_售前商务</span><span class="tn">02_项目启动</span><span class="tn">03_过程文档</span><span class="tn on">04_交付成果</span><span class="tn">05_验收结项</span><span class="tn">06_客户资料</span></div>
+        <div class="tr d3"><span class="tn">_历史版本</span><span class="tc">older versions, replaced by newer ones</span></div>
+      </div>
+      <p class="tree-note">Every project gets the same seven stage folders, generated from your CRM project list. Rename a client and its folder follows.</p>
+    </div>
+  </div>
+</section>
+
+<section class="rows" aria-label="Features">
+  <div class="wrap">
+      <article class="row">
+        <div class="row-text"><h2 class="display"><span class="ln">It only asks</span><span class="ln">when it isn’t sure.</span></h2><ul class="ticks"><li>Every decision shows its evidence: what it saw, and whether in the file name or the body.</li><li>At 90% confidence it files straight away. Everything else waits in Review, filled in, ready for you to press Enter.</li><li>Confirm the same wording twice and it learns a rule. The third time, it just files.</li></ul></div>
+        <figure class="panel t-qing"><img src="../assets/img/card_messy.webp" width="1200" height="541" loading="lazy" alt="Review card: a file called 最终版(2)-评估报告-改.docx is recognised as a data security assessment report for the Qinglan Medical data-security project"></figure>
+      </article>
+      <article class="row flip">
+        <div class="row-text"><h2 class="display"><span class="ln">Photos and scans,</span><span class="ln">named by what they say.</span></h2><ul class="ticks"><li>Text in images is recognised on your machine. Images never leave it.</li><li>Photographed authorisation letters and sign-off sheets are typed by their heading; stamped ones count as signed.</li><li>Screenshots are matched to a project by the client name inside them, keep their original names and go to the evidence folder.</li></ul></div>
+        <figure class="panel t-chi"><img src="../assets/img/card_photo.webp" width="1200" height="607" loading="lazy" alt="Review card: a phone photo of an authorisation letter, its text recognised and filed as a signed test authorisation for the Xingheng Energy project"></figure>
+      </article>
+      <article class="row">
+        <div class="row-text"><h2 class="display"><span class="ln">Browse it like</span><span class="ln">a bookshelf.</span></h2><ul class="ticks"><li>Client, project and stage in columns. Arrow keys to move, space to preview.</li><li>Every file keeps its version history; older versions open in one click.</li><li>Before sending a file out, copy a client-facing name without internal codes.</li></ul></div>
+        <figure class="panel t-huihei"><img src="../assets/img/library.webp" width="1600" height="1012" loading="lazy" alt="Archive browser with columns for client, project and stage, and the version history of an assessment report"></figure>
+      </article>
+      <article class="row flip">
+        <div class="row-text"><h2 class="display"><span class="ln">Projects come from your CRM.</span><span class="ln">Folders follow.</span></h2><ul class="ticks"><li>Import an Excel or CSV export. Importing the same project number again updates it instead of duplicating it.</li><li>If one client ends up with two folders, Tidy Duplicates merges them.</li><li>Filter projects by pinyin initials: qlyl finds 青岚医疗.</li></ul></div>
+        <figure class="panel t-yuebai"><img src="../assets/img/projects.webp" width="1600" height="1012" loading="lazy" alt="Project list with project number, client, project, business line, status and file count"></figure>
+      </article>
+    <p class="shot-note">Screenshots show the app’s Simplified Chinese interface.</p>
+  </div>
+</section>
+
+<section class="how" id="how" aria-labelledby="how-h">
+  <div class="wrap">
+    <header class="sec-head"><h2 class="display" id="how-h"><span class="ln">Three steps</span><span class="ln">to get going.</span></h2></header>
+    <ol class="steps"><li><span class="num">1</span><h3>Import your projects</h3><p>Export the project list from your CRM as Excel or CSV and import it. Client, project and stage folders are created for you.</p></li><li><span class="num">2</span><h3>Hand over your files</h3><p>Drag them into the page, drop them in the inbox folder, right-click Send to on Windows, or switch on WeChat and WeCom collection.</p></li><li><span class="num">3</span><h3>Confirm the unsure ones</h3><p>Most files are filed automatically. Glance over the rest in Review and press Enter.</p></li></ol>
+  </div>
+</section>
+
+<section class="local" aria-labelledby="local-h">
+  <div class="tiles" aria-hidden="true"></div>
+  <div class="wrap local-in">
+    <h2 class="display" id="local-h"><span class="ln">Your files never</span><span class="ln">leave your computer.</span></h2>
+    <dl class="local-list"><div><dt>Runs only on this machine</dt><dd>The service listens on 127.0.0.1 only. Other computers and other web pages can’t reach it.</dd></div><div><dt>No sign-up</dt><dd>No account, no cloud. Your archive is an ordinary folder on your disk, readable without Wenyuan.</dd></div><div><dt>AI is optional</dt><dd>Without it, keywords, rules and your filing history do the work. With it, only the file name and opening text (1,500 characters by default) are sent, never the file itself.</dd></div></dl>
+  </div>
+</section>
+
+<section class="story" id="story" aria-labelledby="story-h">
+  <div class="wrap story-in">
+    <h2 class="display" id="story-h"><span class="ln">Two storeys outside.</span><span class="ln">Three inside.</span></h2>
+    <div class="story-text">
+      <p>The Wenyuan Pavilion (文渊阁) in the Forbidden City was completed in 1776 to house the Siku Quanshu, the great imperial collection of Chinese books. From outside it looks two storeys high, but it holds three; its roof is laid with black glazed tiles, black standing for water, to keep fire away from the books.</p>
+      <ul class="swatches"><li class="c-qing"><i aria-hidden="true"></i><b>Classics</b><span>green</span></li><li class="c-chi"><i aria-hidden="true"></i><b>Histories</b><span>red</span></li><li class="c-yuebai"><i aria-hidden="true"></i><b>Masters</b><span>moon-white</span></li><li class="c-huihei"><i aria-hidden="true"></i><b>Collections</b><span>grey-black</span></li></ul>
+      <p>Each of the four sections was bound in its own colour, so the right shelf could be found at a glance. Our mark is that pavilion, with four coloured cases under its eaves. Your archive has three levels too, client, project and stage, so every file has an obvious place.</p>
+      <p class="cite">Historical source: <a href="https://epaper.gmw.cn/gmrb/html/2015-04/29/nw.D110000gmrb_20150429_2-10.htm" rel="noopener">文渊阁与《四库全书》, Guangming Daily (in Chinese)</a></p>
+    </div>
+  </div>
+</section>
+
+<section class="download" id="download" aria-labelledby="dl-h">
+  <div class="wrap">
+    <div class="dl-top">
+      <img src="../assets/logo.svg" width="88" height="88" alt="">
+      <h2 class="display" id="dl-h"><span class="ln">Put Wenyuan</span><span class="ln">on your computer.</span></h2>
+      <p class="dl-meta"><b>Wenyuan 1.6.1</b><span>ZIP, 169 KB, updated 30 October 2026</span></p>
+      <a class="btn btn-ink btn-lg" href="../download/Wenyuan-1.6.1.zip" download>Download Wenyuan 1.6.1</a>
+    </div>
+    <div class="dl-os">
+      <div><h3>Windows 10 / 11</h3><ol><li>Install Python 3.9 or later and tick “Add python.exe to PATH”.</li><li>Unzip and double-click 启动文渊.bat. The first run installs dependencies, which takes about a minute.</li><li>When the browser opens, import your CRM project list under 项目 (Projects). Next time, open it from the Start menu or the tray icon.</li></ol></div>
+      <div><h3>macOS</h3><ol><li>Put the folder somewhere permanent, such as ~/workspace/文渊.</li><li>Double-click 启动文渊.command. If macOS can’t verify the developer, right-click it and choose Open.</li><li>To keep it running in the background after login, double-click 设置开机自动运行.command.</li></ol></div>
+    </div>
+    <p class="dl-upgrade"><b>Used 归档官 before?</b>That was Wenyuan’s previous name. Unzip the new 文渊 folder next to the old one and start it: settings, projects, history and learned rules carry over, and the old right-click and startup entries are renamed.</p>
+    <p class="dl-links"><a href="https://github.com/jamesju1987/wenyuan">Source code on GitHub</a><a href="https://github.com/jamesju1987/wenyuan#readme">Full guide (in Chinese)</a></p>
+  </div>
+</section>
+
+<section class="faq" id="faq" aria-labelledby="faq-h">
+  <div class="wrap faq-in">
+    <h2 class="display" id="faq-h">Questions</h2>
+    <div class="faq-list"><details><summary>Does it work without AI?</summary><p>Yes. Project numbers, client names and aliases, deliverable keywords, learned rules and your filing history handle most files. With Jev configured, it chooses among candidate projects when keywords can’t decide; with DeepSeek, it reads the opening text to produce better titles and dates.</p></details><details><summary>Are my files uploaded anywhere?</summary><p>No. Wenyuan runs on your computer, and text in images is recognised locally. Only if you switch on AI are the file name and opening text (1,500 characters by default) sent to the model service you configured. Files themselves are never uploaded.</p></details><details><summary>Which files does it handle?</summary><p>Word (docx), Excel, PowerPoint, PDF (including scans), plain text, and images such as JPG, PNG and HEIC. zip, 7z and tar archives are unpacked automatically; rar needs 7-Zip or WinRAR installed. The content of legacy .doc files is read on macOS; on Windows they are judged by file name.</p></details><details><summary>What if something is filed wrong?</summary><p>Undo it from Overview or Activity. The file goes back to Review and any version it replaced is restored. Once you correct it, the automatic rule behind the mistake is switched off.</p></details><details><summary>One client ended up with two folders?</summary><p>Usually after a database reset, or when a client is spelled two ways in your CRM. Open Projects and choose Tidy Duplicates: folders matched by project number are pre-selected, files are only moved, never deleted, and identical copies are kept once.</p></details><details><summary>Does it need the internet?</summary><p>Only the first time, to install dependencies (from a mirror in mainland China by default). After that, everything except the AI features works offline.</p></details><details><summary>Is it free?</summary><p>Yes.</p></details></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <a class="brand" href="#top"><img src="../assets/logo.svg" width="28" height="28" alt=""><span class="bn">Wenyuan</span><span class="bs">文渊</span></a>
+    <p class="foot-tag">Every project, its own library.</p>
+    <nav class="foot-links" aria-label="footer"><a href="#download">Download</a><a href="https://github.com/jamesju1987/wenyuan">GitHub</a><a href="https://github.com/jamesju1987/wenyuan#readme">Guide (Chinese)</a><a href="../" hreflang="zh-CN" lang="zh-CN">简体中文</a></nav>
+    <p class="foot-copy">© 2026 Wenyuan</p>
+  </div>
+</footer>
+
+<script src="../assets/site.js?v=1.6.1" defer></script>
+</body>
+</html>
