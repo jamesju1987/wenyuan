@@ -220,8 +220,14 @@ def lines(pair, cls="ln") -> str:
     return "".join(f'<span class="{cls}">{esc(x)}</span>' for x in pair)
 
 
+def _hash(name: str) -> str:
+    import hashlib
+    return hashlib.sha1((DOCS / "assets" / name).read_bytes()).hexdigest()[:10]
+
+
 def page(L: dict) -> str:
     b = L["base"]
+    css_v, js_v = _hash("site.css"), _hash("site.js")       # 内容变了链接就变，浏览器不会用旧缓存
     a = b + "assets/"
     zh = L["lang"] == "zh-CN"
     nav_ids = ("features", "how", "story", "download", "faq")
@@ -278,7 +284,7 @@ def page(L: dict) -> str:
 <meta property="og:image" content="{SITE}assets/{L["og_img"]}">
 <meta property="og:url" content="{SITE}{"" if zh else "en/"}">
 <link rel="preload" href="{a}fonts/{"wy-serif-600.woff2" if zh else "wy-latin-600.woff2"}" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="{a}site.css?v={VER}">
+<link rel="stylesheet" href="{a}site.css?v={css_v}">
 <script>document.documentElement.classList.add("js")</script>
 </head>
 <body class="{"zh" if zh else "en"}">
@@ -421,7 +427,7 @@ def page(L: dict) -> str:
   </div>
 </footer>
 
-<script src="{a}site.js?v={VER}" defer></script>
+<script src="{a}site.js?v={js_v}" defer></script>
 </body>
 </html>
 '''
