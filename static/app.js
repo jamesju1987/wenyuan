@@ -1434,7 +1434,8 @@ async function loadSources(data) {
   box.innerHTML = `${rows || `<div class="row"><span class="desc grow">还没有添加来源。点「自动查找」找到本机的微信、企业微信文件夹。</span></div>`}
     <div class="row"><div class="grow"><div>认不出项目的文件</div><div class="desc">微信里也有私人文件：忽略的文件在「处理记录 → 已忽略」里，需要时可以「拿来归档」</div></div>
       <div class="segmented" id="st-src-unmatched"><button data-v="ignore" class="${data.unmatched !== "keep" ? "on" : ""}">忽略</button><button data-v="keep" class="${data.unmatched === "keep" ? "on" : ""}">放进未匹配</button></div></div>
-    <div class="row"><div class="grow"></div><button class="btn" id="st-src-detect">${ic("search")}自动查找微信 / 企业微信</button><button class="btn" id="st-src-add">${ic("plus")}添加文件夹…</button></div>`;
+    <div class="row"><div class="grow"></div><button class="btn" id="st-src-detect">${ic("search")}自动查找微信 / 企业微信</button><button class="btn" id="st-src-add">${ic("plus")}添加文件夹…</button></div>
+    ${S.srcHint ? `<div class="row src-hint">${ic("warning")}<div class="grow"><div><b>没有找到微信 / 企业微信的文件夹</b></div><div class="desc">在微信「设置 → 文件管理」里点「打开文件夹」看看位置（新版微信在设置的「存储空间」里，企业微信在「设置」里也能看到文件存储位置）；再点上面的「添加文件夹…」选它。选「WeChat Files」「xwechat_files」或「WXWork」这一层就行，会自动找到每个账号收文件的地方。</div></div></div>` : ""}`;
   $$("[data-src-on]", box).forEach((c) => (c.onchange = async () => {
     try { loadSources(await api(`/api/sources/${c.dataset.srcOn}`, { method: "PUT", json: { enabled: c.checked } })); toast(c.checked ? "已开启，只收从现在起的新文件" : "已暂停这个来源"); }
     catch (e) { c.checked = !c.checked; fail(e); }
@@ -1449,17 +1450,21 @@ async function loadSources(data) {
   $("#st-src-detect", box).onclick = async () => {
     try {
       const r = await api("/api/sources/detect", { method: "POST" });
+      S.srcHint = !r.chat_found?.length;
       loadSources(r);
-      toast(r.added ? `找到并添加了 ${r.added} 个来源` : (r.found ? "找到的来源都已添加过" : "没有找到微信 / 企业微信的文件夹"),
-        r.added ? "已开启，只收从现在起的新文件" : (r.found ? "" : "可以点「添加文件夹…」手动选择（微信设置 → 文件管理 里能看到位置）"));
+      if (r.chat_added?.length) toast(`已添加 ${r.chat_added.join("、")}`, "已开启，只收从现在起微信里新收到的文件");
+      else if (r.chat_found?.length) toast("微信 / 企业微信已经添加过了", r.chat_found.join("、"));
+      else toast("没有找到微信 / 企业微信的文件夹", "下面有手动添加的方法", "error");
     } catch (e) { fail(e); }
   };
   $("#st-src-add", box).onclick = async () => {
     try {
       const f = await api("/api/settings/pick-folder", { method: "POST" });
       if (!f.path) return;
-      loadSources(await api("/api/sources", { json: { path: f.path } }));
-      toast("已添加来源", "只收从现在起的新文件");
+      const r = await api("/api/sources", { json: { path: f.path } });
+      if (r.chat) S.srcHint = false;
+      loadSources(r);
+      toast(r.chat ? `已添加 ${r.added_names.join("、")}` : "已添加来源", r.chat ? "认出是微信的文件夹，只收聊天里收到的文件，从现在起生效" : "只收从现在起的新文件");
     } catch (e) { fail(e); }
   };
 }

@@ -614,7 +614,10 @@ def sources_detect():
         except ValueError:
             continue
     source_watcher.start()
-    return {**_sources_view(), "found": len(found), "added": len(added)}
+    chat = [c for c in found if c["kind"] != "folder"]
+    return {**_sources_view(), "found": len(found), "added": len(added),
+            "chat_found": [c["name"] for c in chat],
+            "chat_added": [c["name"] for c in added if c["kind"] != "folder"]}
 
 
 class SourceIn(BaseModel):
@@ -624,9 +627,20 @@ class SourceIn(BaseModel):
 
 @app.post("/api/sources")
 def sources_add(body: SourceIn):
-    SRC.add_source(body.path, body.name.strip())
+    p = SRC.check_path(body.path)
+    chat = SRC.chat_folders(p)          # 选的是微信 / 企业微信的文件夹：换成每个账号「收到的文件」那一层
+    added = []
+    if chat:
+        have = {os.path.normcase(str(Path(s["path"]))) for s in SRC.all_sources()}
+        for kind, name, cp in chat:
+            if os.path.normcase(str(cp)) not in have:
+                added.append(SRC.add_source(str(cp), name, kind))
+        if not added:
+            raise ValueError("这个文件夹里的微信 / 企业微信账号都已经添加过了")
+    else:
+        added.append(SRC.add_source(body.path, body.name.strip()))
     source_watcher.start()
-    return _sources_view()
+    return {**_sources_view(), "added_names": [a["name"] for a in added], "chat": bool(chat)}
 
 
 class SourcePatch(BaseModel):

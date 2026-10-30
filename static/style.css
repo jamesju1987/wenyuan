@@ -496,3 +496,6 @@ input[type=range] { accent-color: var(--accent); width: 180px; }
 .sheet.wide-sheet { display: flex; flex-direction: column; overflow: hidden; }
 .sheet.wide-sheet .body.tidy { flex: 1; min-height: 0; overflow: auto; border-top: .5px solid var(--separator); border-bottom: .5px solid var(--separator); padding-top: 12px; }
 .sheet.wide-sheet .foot { padding-top: 12px; }
+.src-hint { align-items: flex-start; background: color-mix(in srgb, var(--orange) 8%, transparent); }
+.src-hint > .i { color: var(--orange); margin-top: 2px; flex: none; }
+.src-hint .desc { line-height: 1.6; }

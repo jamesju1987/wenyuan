@@ -57,49 +57,148 @@ def _documents_dir() -> Path:
     return Path.home() / "Documents"
 
 
-def _wechat3_roots() -> List[Path]:
-    """微信 3.x 可以在「设置 → 文件管理」改存储位置，记在注册表里。"""
-    roots = [_documents_dir()]
+def _ini_paths(folder: Path) -> List[Path]:
+    """微信把自定义的存储位置写在 config 文件夹的 .ini 里（内容就是一个路径，默认是 MyDocument:）。"""
+    out: List[Path] = []
+    try:
+        for f in sorted(folder.glob("*.ini")):
+            try:
+                raw = f.read_bytes()[:1024]
+            except OSError:
+                continue
+            for enc in ("utf-8", "gbk", "utf-16"):
+                try:
+                    v = raw.decode(enc).strip().strip("\x00").strip()
+                    break
+                except UnicodeDecodeError:
+                    v = ""
+            if v and v != "MyDocument:" and len(v) < 260 and Path(v).is_dir():
+                out.append(Path(v))
+    except OSError:
+        pass
+    return out
+
+
+def _fixed_drives() -> List[Path]:
+    """本机的固定磁盘（C:、D:…），不碰网络盘和光驱，免得卡住。"""
+    if not sys.platform.startswith("win"):
+        return []
+    out: List[Path] = []
+    try:
+        import ctypes
+        mask = ctypes.windll.kernel32.GetLogicalDrives()
+        for i in range(26):
+            if mask & (1 << i):
+                root = f"{chr(65 + i)}:\\"
+                if ctypes.windll.kernel32.GetDriveTypeW(root) == 3:      # DRIVE_FIXED
+                    out.append(Path(root))
+    except Exception:
+        pass
+    return out
+
+
+def _chat_roots() -> List[Path]:
+    """可能放着「WeChat Files」「xwechat_files」「WXWork」的文件夹。"""
+    roots: List[Path] = [_documents_dir()]
     if sys.platform.startswith("win"):
+        appdata = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
+        roots += _ini_paths(appdata / "Tencent" / "xwechat" / "config")                 # 微信 4.x
+        roots += _ini_paths(appdata / "Tencent" / "WeChat" / "All Users" / "config")    # 微信 3.x
         try:
             import winreg
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Tencent\WeChat") as k:
                 v, _ = winreg.QueryValueEx(k, "FileSavePath")
-                if v and v != "MyDocument:" and Path(v).exists():
-                    roots.insert(0, Path(v))
+                if v and v != "MyDocument:" and Path(v).is_dir():
+                    roots.append(Path(v))
         except Exception:
             pass
-    return roots
+        # 存储位置改到了别的盘：看一下每个盘的根目录和第一层文件夹
+        for d in _fixed_drives():
+            roots.append(d)
+            try:
+                roots += [x for x in d.iterdir() if x.is_dir() and not x.name.startswith(("$", "."))
+                          and x.name.lower() not in ("windows", "program files", "program files (x86)", "programdata")]
+            except OSError:
+                continue
+    out, seen = [], set()
+    for r in roots:
+        k = os.path.normcase(str(r))
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
 
 
-def _account(p: Path, levels_up: int) -> str:
-    name = p.parents[levels_up - 1].name if levels_up else p.name
+# 每种聊天软件：存放账号的文件夹名 → 每个账号下「收到的文件」在哪（找不到就退一级，靠路径里的 file 过滤）
+CHAT_LAYOUT = (
+    ("WeChat Files", "wechat", (("FileStorage", "File"), ("FileStorage",))),        # 微信 3.x
+    ("xwechat_files", "wechat", (("msg", "file"), ("msg",))),                      # 微信 4.x
+    ("WXWork", "wxwork", (("Cache", "File"), ("Cache",))),                         # 企业微信
+)
+SKIP_ACCOUNTS = ("all users", "all_users", "applet", "wmpf", "backup", "global", "wxdrive", "plugins")
+
+
+def _short(name: str) -> str:
     return name if len(name) <= 14 else name[:12] + "…"
+
+
+def _accounts(container: Path, kind: str, subs) -> List[Tuple[str, str, Path]]:
+    out: List[Tuple[str, str, Path]] = []
+    try:
+        accts = sorted(x for x in container.iterdir() if x.is_dir())
+    except OSError:
+        return out
+    for a in accts:
+        if a.name.lower() in SKIP_ACCOUNTS:
+            continue
+        for sub in subs:
+            p = a.joinpath(*sub)
+            if p.is_dir():
+                out.append((kind, f"{KIND_NAMES[kind]}（{_short(a.name)}）", p))
+                break
+    return out
+
+
+def chat_folders(path: Path) -> List[Tuple[str, str, Path]]:
+    """给一个文件夹，找出里面（或它所在的）微信、企业微信账号的「收到的文件」文件夹。
+
+    可以是 D:\\、D:\\WeChat Files、…\\xwechat_files\\wxid_x\\msg\\file\\2026-10 这类任意一层。
+    """
+    found: List[Tuple[str, str, Path]] = []
+    parts_l = [x.lower() for x in path.parts]
+    for cname, kind, subs in CHAT_LAYOUT:
+        if cname.lower() in parts_l:                       # 在某个账号里面：退回到这个账号
+            i = parts_l.index(cname.lower())
+            if len(path.parts) > i + 1:
+                acct = Path(*path.parts[: i + 2])
+                found += [t for t in _accounts(acct.parent, kind, subs) if t[2].is_relative_to(acct)]
+            else:
+                found += _accounts(path, kind, subs)
+            continue
+        c = path / cname
+        if c.is_dir():
+            found += _accounts(c, kind, subs)
+    return found
 
 
 def detect() -> List[Dict]:
     """找本机微信、企业微信的「接收文件」文件夹和「下载」文件夹。"""
     found: List[Tuple[str, str, Path]] = []
     home = Path.home()
-
-    def add(kind: str, pattern: str, levels_up: int) -> None:
-        for g in sorted(glob(pattern)):
-            p = Path(g)
-            if p.is_dir() and not any(x in str(p) for x in ("All Users", "Applet", "WMPF")):
-                found.append((kind, f"{KIND_NAMES[kind]}（{_account(p, levels_up)}）", p))
-
     if sys.platform.startswith("win"):
-        docs = _documents_dir()
-        for root in _wechat3_roots():
-            add("wechat", str(root / "WeChat Files" / "*" / "FileStorage" / "File"), 2)
-        add("wechat", str(docs / "xwechat_files" / "*" / "msg" / "file"), 2)
-        add("wxwork", str(docs / "WXWork" / "*" / "Cache" / "File"), 2)
+        for root in _chat_roots():
+            found += chat_folders(root)
     elif sys.platform == "darwin":
         c = home / "Library" / "Containers"
-        add("wechat", str(c / "com.tencent.xinWeChat" / "Data" / "Documents" / "xwechat_files" / "*" / "msg" / "file"), 2)
-        add("wechat", str(c / "com.tencent.xinWeChat" / "Data" / "Library" / "Application Support" /
-                          "com.tencent.xinWeChat" / "*" / "*" / "Message" / "MessageTemp"), 2)
-        add("wxwork", str(c / "com.tencent.WeWorkMac" / "Data" / "Documents" / "Profiles" / "*" / "Caches" / "Files"), 2)
+        for pattern, kind in (
+                (c / "com.tencent.xinWeChat" / "Data" / "Documents" / "xwechat_files" / "*" / "msg" / "file", "wechat"),
+                (c / "com.tencent.xinWeChat" / "Data" / "Library" / "Application Support" / "com.tencent.xinWeChat" /
+                 "*" / "*" / "Message" / "MessageTemp", "wechat"),
+                (c / "com.tencent.WeWorkMac" / "Data" / "Documents" / "Profiles" / "*" / "Caches" / "Files", "wxwork")):
+            for g in sorted(glob(str(pattern))):
+                p = Path(g)
+                if p.is_dir() and not any(x in str(p) for x in ("All Users", "Applet", "WMPF")):
+                    found.append((kind, f"{KIND_NAMES[kind]}（{_short(p.parents[1].name)}）", p))
     dl = home / "Downloads"
     if dl.is_dir():
         found.append(("folder", "下载", dl))
