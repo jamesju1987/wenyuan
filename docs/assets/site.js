@@ -1,14 +1,17 @@
-/* 文渊 官网：导航配色 + 首屏演示 */
+/* 文渊 官网：导航毛玻璃 + 归档演示 */
 (function () {
   var nav = document.getElementById("nav");
-  var hero = document.getElementById("top");
-  if ("IntersectionObserver" in window && hero) {
-    new IntersectionObserver(function (es) {
-      nav.classList.toggle("light", !es[0].isIntersecting);
-    }, { rootMargin: "-68px 0px 0px 0px" }).observe(hero);
-  } else {
-    nav.classList.add("light");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      nav.classList.toggle("scrolled", window.scrollY > 12);
+      ticking = false;
+    });
   }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  nav.classList.toggle("scrolled", window.scrollY > 12);
 
   var demo = document.getElementById("demo");
   if (!demo) return;

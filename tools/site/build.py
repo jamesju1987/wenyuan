@@ -25,6 +25,7 @@ ZH = dict(
     title="文渊：项目文件自动归档",
     desc="文渊自动认出文件属于哪个客户、哪个项目、是什么交付物，按统一规范改名，放进客户、项目、阶段三级目录。在你自己的电脑上运行，免费下载，Windows 与 macOS 通用。",
     og_title="文渊：每个项目，一座文渊阁", og_img="og.png",
+    hero_alt="文渊的概览页：今日归档数、自动归档率、待复核和最近处理的文件",
     nav=("功能", "用法", "名字由来", "下载", "问答"), nav_dl="下载",
     h1=("每个项目，", "一座文渊阁。"),
     lede="把文件交给文渊：它认出文件属于哪个客户、哪个项目、是什么交付物，按统一规范改好名字，放进对应的阶段目录。拿不准的才来问你。整个过程都在你自己的电脑上完成。",
@@ -118,6 +119,7 @@ EN = dict(
     title="Wenyuan: project files, filed for you",
     desc="Wenyuan works out which client, project and deliverable each file belongs to, renames it to one standard and files it into client, project and stage folders. Runs on your own computer. Free for Windows and macOS.",
     og_title="Wenyuan: every project, its own library", og_img="og-en.png",
+    hero_alt="Wenyuan’s overview screen: files filed today, auto-filing rate, items waiting for review and recent activity",
     nav=("Features", "How it works", "The name", "Download", "FAQ"), nav_dl="Download",
     h1=("Every project,", "its own library."),
     lede="Hand Wenyuan a file. It works out which client, project and deliverable it belongs to, renames it to one consistent standard, and files it into the right stage folder. It only asks when it isn’t sure, and it all happens on your own computer.",
@@ -209,7 +211,7 @@ EN = dict(
 SEG_CODES = ("PRJ-2026-0118", "RPT-DSA", "青岚医疗数据安全风险评估报告", "V1.0", "正式", "20261020")
 CASE_CLASS = ("c-qing", "c-chi", "c-yuebai", "c-huihei")
 ROW_TINT = ("t-qing", "t-chi", "t-huihei", "t-yuebai")
-SHOT_SIZE = {"card_messy": (1200, 541), "card_photo": (1200, 607), "library": (1600, 1012), "projects": (1600, 1012)}
+SHOT_SIZE = {"card_messy": (1616, 728), "card_photo": (1616, 818), "library": (2000, 1265), "projects": (2000, 1265)}
 
 
 def esc(s: str) -> str:
@@ -271,7 +273,7 @@ def page(L: dict) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(L["title"])}</title>
 <meta name="description" content="{esc(L["desc"])}">
-<meta name="theme-color" content="#111921">
+<meta name="theme-color" content="#0E1419">
 <link rel="canonical" href="{SITE}{"" if zh else "en/"}">
 <link rel="alternate" hreflang="zh-CN" href="{SITE}">
 <link rel="alternate" hreflang="en" href="{SITE}en/">
@@ -304,16 +306,24 @@ def page(L: dict) -> str:
 <section class="hero" id="top">
   <div class="tiles" aria-hidden="true"></div>
   <div class="wrap hero-in">
-    <img class="emblem" src="{a}mark-mono.svg" width="76" height="62" alt="">
-    <h1 class="display">{lines(L["h1"])}</h1>
-    <p class="lede">{esc(L["lede"])}</p>
-    <div class="cta">
-      <a class="btn btn-paper" href="{dl}" download>{esc(L["cta"])}</a>
-      <a class="btn btn-ghost" href="#how">{esc(L["cta2"])}</a>
+    <div class="hero-copy">
+      <img class="emblem" src="{a}mark-mono.svg" width="64" height="52" alt="">
+      <h1 class="display">{lines(L["h1"])}</h1>
+      <p class="lede">{esc(L["lede"])}</p>
+      <div class="cta">
+        <a class="btn btn-paper" href="{dl}" download>{esc(L["cta"])}</a>
+        <a class="btn btn-ghost" href="#how">{esc(L["cta2"])}</a>
+      </div>
+      <p class="fine">{esc(L["fine"])}</p>
     </div>
-    <p class="fine">{esc(L["fine"])}</p>
   </div>
-  <div class="wrap demo-wrap">
+  <figure class="stage">
+    <div class="win"><img src="{a}img/hero.webp" width="1800" height="1138" alt="{esc(L["hero_alt"])}" fetchpriority="high"></div>
+  </figure>
+</section>
+
+<section class="flow" aria-label="{esc(L["demo_label"])}">
+  <div class="wrap">
     <figure class="demo" id="demo" aria-label="{esc(L["demo_label"])}">
       <div class="demo-col">
         <div class="demo-head"><span>{esc(L["demo_in"])}</span><button type="button" class="replay" id="replay" hidden>{esc(L["replay"])}</button></div>
@@ -398,7 +408,7 @@ def page(L: dict) -> str:
       <img src="{a}logo.svg" width="88" height="88" alt="">
       <h2 class="display" id="dl-h">{lines(L["dl_h"])}</h2>
       <p class="dl-meta"><b>{esc(L["dl_name"])}</b><span>{esc(L["dl_meta"])}</span></p>
-      <a class="btn btn-ink btn-lg" href="{dl}" download>{esc(L["cta"])}</a>
+      <a class="btn btn-paper btn-lg" href="{dl}" download>{esc(L["cta"])}</a>
     </div>
     <div class="dl-os">
       <div><h3>Windows 10 / 11</h3><ol>{win}</ol></div>
