@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文渊：项目文件自动归档</title>
 <meta name="description" content="文渊自动认出文件属于哪个客户、哪个项目、是什么交付物，按统一规范改名，放进客户、项目、阶段三级目录。在你自己的电脑上运行，免费下载，Windows 与 macOS 通用。">
-<meta name="theme-color" content="#111921">
+<meta name="theme-color" content="#0E1419">
 <link rel="canonical" href="https://jamesju1987.github.io/wenyuan/">
 <link rel="alternate" hreflang="zh-CN" href="https://jamesju1987.github.io/wenyuan/">
 <link rel="alternate" hreflang="en" href="https://jamesju1987.github.io/wenyuan/en/">
@@ -18,7 +18,7 @@
 <meta property="og:image" content="https://jamesju1987.github.io/wenyuan/assets/og.png">
 <meta property="og:url" content="https://jamesju1987.github.io/wenyuan/">
 <link rel="preload" href="assets/fonts/wy-serif-600.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/site.css?v=0fc5fe6789">
+<link rel="stylesheet" href="assets/site.css?v=c055eb0b99">
 <script>document.documentElement.classList.add("js")</script>
 </head>
 <body class="zh">
@@ -38,16 +38,24 @@
 <section class="hero" id="top">
   <div class="tiles" aria-hidden="true"></div>
   <div class="wrap hero-in">
-    <img class="emblem" src="assets/mark-mono.svg" width="76" height="62" alt="">
-    <h1 class="display"><span class="ln">每个项目，</span><span class="ln">一座文渊阁。</span></h1>
-    <p class="lede">把文件交给文渊：它认出文件属于哪个客户、哪个项目、是什么交付物，按统一规范改好名字，放进对应的阶段目录。拿不准的才来问你。整个过程都在你自己的电脑上完成。</p>
-    <div class="cta">
-      <a class="btn btn-paper" href="download/Wenyuan-1.6.1.zip" download>下载文渊 1.6.1</a>
-      <a class="btn btn-ghost" href="#how">看看怎么用</a>
+    <div class="hero-copy">
+      <img class="emblem" src="assets/mark-mono.svg" width="64" height="52" alt="">
+      <h1 class="display"><span class="ln">每个项目，</span><span class="ln">一座文渊阁。</span></h1>
+      <p class="lede">把文件交给文渊：它认出文件属于哪个客户、哪个项目、是什么交付物，按统一规范改好名字，放进对应的阶段目录。拿不准的才来问你。整个过程都在你自己的电脑上完成。</p>
+      <div class="cta">
+        <a class="btn btn-paper" href="download/Wenyuan-1.6.1.zip" download>下载文渊 1.6.1</a>
+        <a class="btn btn-ghost" href="#how">看看怎么用</a>
+      </div>
+      <p class="fine">免费。Windows 10/11 与 macOS 通用，需要 Python 3.9 或以上。</p>
     </div>
-    <p class="fine">免费。Windows 10/11 与 macOS 通用，需要 Python 3.9 或以上。</p>
   </div>
-  <div class="wrap demo-wrap">
+  <figure class="stage">
+    <div class="win"><img src="assets/img/hero.webp" width="1800" height="1138" alt="文渊的概览页：今日归档数、自动归档率、待复核和最近处理的文件" fetchpriority="high"></div>
+  </figure>
+</section>
+
+<section class="flow" aria-label="演示：一份名字很乱的文件被识别、改名，放进项目的交付成果目录">
+  <div class="wrap">
     <figure class="demo" id="demo" aria-label="演示：一份名字很乱的文件被识别、改名，放进项目的交付成果目录">
       <div class="demo-col">
         <div class="demo-head"><span>收件箱里来了一份文件</span><button type="button" class="replay" id="replay" hidden>再看一遍</button></div>
@@ -96,19 +104,19 @@
   <div class="wrap">
       <article class="row">
         <div class="row-text"><h2 class="display"><span class="ln">拿不准的，</span><span class="ln">才来问你。</span></h2><ul class="ticks"><li>每个判断都写着依据：在文件名还是正文里看到了什么。</li><li>把握到九成就直接归档；其余进「待复核」，内容都已填好，按回车确认。</li><li>同一个叫法你确认过两次，它就学会这条规则，第三次直接归档。</li></ul></div>
-        <figure class="panel t-qing"><img src="assets/img/card_messy.webp" width="1200" height="541" loading="lazy" alt="待复核卡片：一份叫「最终版(2)-评估报告-改.docx」的文件，被识别为青岚医疗数据安全评估项目的数据安全评估报告"></figure>
+        <figure class="panel t-qing"><img src="assets/img/card_messy.webp" width="1616" height="728" loading="lazy" alt="待复核卡片：一份叫「最终版(2)-评估报告-改.docx」的文件，被识别为青岚医疗数据安全评估项目的数据安全评估报告"></figure>
       </article>
       <article class="row flip">
         <div class="row-text"><h2 class="display"><span class="ln">照片和扫描件，</span><span class="ln">也按内容命名。</span></h2><ul class="ticks"><li>在本机识别图中文字，图片不会上传到任何地方。</li><li>拍下来的授权书、验收单按标题定类型，盖了章的默认算签字版。</li><li>截图按图里的客户名找项目，保留原名，放进「证据」目录。</li></ul></div>
-        <figure class="panel t-chi"><img src="assets/img/card_photo.webp" width="1200" height="607" loading="lazy" alt="待复核卡片：手机拍的授权书照片，识别出图中文字，归为星衡能源大模型安全测试项目的测试授权书，状态为签字"></figure>
+        <figure class="panel t-chi"><img src="assets/img/card_photo.webp" width="1616" height="818" loading="lazy" alt="待复核卡片：手机拍的授权书照片，识别出图中文字，归为星衡能源大模型安全测试项目的测试授权书，状态为签字"></figure>
       </article>
       <article class="row">
         <div class="row-text"><h2 class="display"><span class="ln">像翻书架</span><span class="ln">一样找文件。</span></h2><ul class="ticks"><li>按客户、项目、阶段分栏浏览，方向键翻页，空格快速查看。</li><li>每份文件都有版本历史，旧版本一点就能打开。</li><li>发给客户前复制「对外交付名」，自动去掉内部编号和类型码。</li></ul></div>
-        <figure class="panel t-huihei"><img src="assets/img/library.webp" width="1600" height="1012" loading="lazy" alt="归档库分栏浏览：澄湾科技、等保测评2026、04_交付成果，右侧是等保测评报告的版本历史"></figure>
+        <figure class="panel t-huihei"><img src="assets/img/library.webp" width="2000" height="1265" loading="lazy" alt="归档库分栏浏览：澄湾科技、等保测评2026、04_交付成果，右侧是等保测评报告的版本历史"></figure>
       </article>
       <article class="row flip">
         <div class="row-text"><h2 class="display"><span class="ln">项目从 CRM 来，</span><span class="ln">目录自己长出来。</span></h2><ul class="ticks"><li>导入 CRM 导出的 Excel 或 CSV；同一个项目编号再导入是更新，不会重复。</li><li>客户写法不统一、出现两个文件夹时，「整理重复客户」一键合并。</li><li>打拼音首字母就能筛选，qlyl 找到青岚医疗。</li></ul></div>
-        <figure class="panel t-yuebai"><img src="assets/img/projects.webp" width="1600" height="1012" loading="lazy" alt="项目列表：项目编号、客户、项目、业务线、状态和文件数"></figure>
+        <figure class="panel t-yuebai"><img src="assets/img/projects.webp" width="2000" height="1265" loading="lazy" alt="项目列表：项目编号、客户、项目、业务线、状态和文件数"></figure>
       </article>
     
   </div>
@@ -147,7 +155,7 @@
       <img src="assets/logo.svg" width="88" height="88" alt="">
       <h2 class="display" id="dl-h"><span class="ln">把文渊</span><span class="ln">装进你的电脑。</span></h2>
       <p class="dl-meta"><b>文渊 1.6.1</b><span>ZIP 压缩包，169 KB，2026 年 10 月 30 日更新</span></p>
-      <a class="btn btn-ink btn-lg" href="download/Wenyuan-1.6.1.zip" download>下载文渊 1.6.1</a>
+      <a class="btn btn-paper btn-lg" href="download/Wenyuan-1.6.1.zip" download>下载文渊 1.6.1</a>
     </div>
     <div class="dl-os">
       <div><h3>Windows 10 / 11</h3><ol><li>先装 Python 3.9 或以上，安装时勾选「Add python.exe to PATH」。</li><li>解压后双击「启动文渊.bat」。第一次会自动安装依赖，大约 1 分钟。</li><li>浏览器打开后，在「项目」里导入 CRM 项目表。以后从开始菜单或托盘图标打开。</li></ol></div>
@@ -176,6 +184,6 @@
   </div>
 </footer>
 
-<script src="assets/site.js?v=30f60c0d3a" defer></script>
+<script src="assets/site.js?v=6cf4ea04b9" defer></script>
 </body>
 </html>
