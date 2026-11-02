@@ -7,10 +7,12 @@ import os
 import queue
 import re
 import shutil
+import stat
 import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -56,6 +58,35 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
+ANALYZE_TIMEOUT = 300      # 单个文件识别最多等 5 分钟，超时就交给人处理，不堵住后面的文件
+
+
+def make_writable(path: Path) -> None:
+    """去掉只读属性。Windows 版微信（3.9 起）收到的文件都是只读的，复制过来也带着只读，
+    不去掉的话临时副本删不掉、归档后的文件也改不了。"""
+    try:
+        mode = os.stat(path).st_mode
+        if not mode & stat.S_IWUSR:
+            os.chmod(path, mode | stat.S_IWUSR | stat.S_IREAD)
+    except OSError:
+        pass
+
+
+def remove_file(path: Path, tries: int = 6) -> bool:
+    """删除临时副本：只读的先去掉只读；被杀毒软件等短暂占用时稍等重试。删不掉也不抛异常。"""
+    for i in range(tries):
+        try:
+            path.unlink(missing_ok=True)
+            return True
+        except PermissionError:
+            make_writable(path)
+        except OSError:
+            pass
+        time.sleep(0.3 * (i + 1))
+    print("临时文件删不掉，先留着：", path)
+    return False
+
+
 def should_ignore(path: Path) -> bool:
     name = path.name
     if name.startswith(".") or name.startswith("~$") or name in ("Thumbs.db", "desktop.ini", "Icon\r"):
@@ -96,6 +127,8 @@ class Pipeline:
         self.batch_projects: Dict[str, Tuple[int, float]] = {}
         self.lock = threading.RLock()
         self.busy = False
+        self.current_job: Optional[int] = None
+        self.recovered: Dict[int, int] = {}
         self.processed = 0
         self.history = learning.History(db)
         self.thread = threading.Thread(target=self._loop, name="pipeline", daemon=True)
@@ -118,21 +151,91 @@ class Pipeline:
         while True:
             task = self.q.get()
             self.busy = True
+            self.current_job = task.rerun_job_id
             try:
                 self.process(task)
-            except Exception:
+            except Exception as e:
                 traceback.print_exc()
+                self._fail_current(e)
             finally:
                 self.busy = False
+                self.current_job = None
                 with self.lock:
                     self.inflight.discard(os.path.abspath(task.path))
                 self.processed += 1
+            if self.q.empty():
+                try:      # 队列空了还有「识别中」的，说明哪里漏了：重新排队或如实标出来
+                    self.recover_jobs()
+                except Exception:
+                    traceback.print_exc()
+
+    def _fail_current(self, e: Exception) -> None:
+        """处理中途出了没预料到的错：这一条标成「出错」，不能一直停在「识别中」。"""
+        jid = self.current_job
+        if not jid:
+            return
+        try:
+            j = self.db.one("SELECT status FROM jobs WHERE id=?", (jid,))
+            if j and j["status"] == "processing":
+                self.db.update("jobs", jid, {"status": "error", "error": f"处理出错：{e}"[:500], "decided_at": now()})
+        except Exception:
+            traceback.print_exc()
+
+    def recover_jobs(self) -> int:
+        """停在「识别中」却没有在处理的记录（上次退出时正在处理的、处理中途出意外的）重新排队；
+        临时文件不在了就如实标出来。启动时和队列空闲时各查一次。"""
+        n = 0
+        for j in self.db.q("SELECT * FROM jobs WHERE status='processing' ORDER BY id"):
+            staged = Path(j["staged_path"]) if j.get("staged_path") else None
+            orig = j.get("original_path") or ""
+            origin = orig if orig and orig != j.get("staged_path") else ""
+            tries = self.recovered.get(j["id"], 0)
+            if staged and staged.is_file() and tries >= 2:
+                self.db.update("jobs", j["id"], {"status": "error", "decided_at": now(),
+                                                 "error": "重试两次仍没有处理完，请手动指定项目或「重新识别」"})
+            elif staged and staged.is_file():
+                self.recovered[j["id"]] = tries + 1
+                keep = (not origin) or "拿来归档" in staged.parts or config.get("source_unmatched") == "keep"
+                n += self.submit(Task(path=str(staged), source=j.get("source") or "恢复", origin=origin,
+                                      batch_id=j.get("batch_id") or None, rerun_job_id=j["id"], keep_unmatched=keep))
+            elif origin and Path(origin).is_file():
+                self.db.update("jobs", j["id"], {"status": "ignored", "staged_path": "", "decided_at": now(),
+                                                 "result": {"ignored_reason": "处理中断"}})
+            else:
+                self.db.update("jobs", j["id"], {"status": "error", "decided_at": now(),
+                                                 "error": "处理中断，临时文件已经不在了；需要的话把原文件重新放进收件箱"})
+        return n
+
+    def fix_readonly_archive(self) -> int:
+        """以前从微信归档进来的文件可能还是只读的（打开后不能保存），顺手去掉只读。"""
+        n = 0
+        for r in self.db.q("SELECT archive_path FROM files WHERE state IN ('archived','superseded')"):
+            fp = r.get("archive_path")
+            try:
+                if fp and os.path.isfile(fp) and not os.stat(fp).st_mode & stat.S_IWUSR:
+                    make_writable(Path(fp))
+                    n += 1
+            except OSError:
+                continue
+        return n
+
+    def _analyze_limited(self, src: Path, task: Task, job_id: int) -> Dict:
+        ex = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analyze")
+        fut = ex.submit(self.analyze, src, task, job_id)
+        try:
+            return fut.result(timeout=ANALYZE_TIMEOUT)
+        except FutureTimeout:
+            span = f"{ANALYZE_TIMEOUT // 60} 分钟" if ANALYZE_TIMEOUT >= 60 else f"{ANALYZE_TIMEOUT} 秒"
+            raise TimeoutError(f"识别超过 {span}还没完成，已跳过，请手动指定项目") from None
+        finally:
+            ex.shutdown(wait=False)
 
     # ------------------------------------------------------------ 主流程
     def process(self, task: Task) -> Optional[int]:
         src = Path(task.path)
         if not src.exists() or not src.is_file():
             return None
+        make_writable(src)
         size = src.stat().st_size
         sha = sha256_of(src)
         if task.rerun_job_id:
@@ -143,6 +246,7 @@ class Pipeline:
                 "original_name": src.name, "original_path": task.origin or str(src), "staged_path": str(src),
                 "source": task.source, "batch_id": task.batch_id or "", "sha256": sha, "size": size,
                 "status": "processing", "created_at": now()})
+            self.current_job = job_id
             dup = self.db.one("SELECT * FROM files WHERE sha256=? AND state IN ('archived','superseded') "
                               "ORDER BY id DESC LIMIT 1", (sha,))
             pend = None if dup else self.db.one(
@@ -150,10 +254,10 @@ class Pipeline:
                 "ORDER BY id DESC LIMIT 1", (sha, job_id))
             if (dup or pend) and task.origin:
                 # 微信等来源的复制件：已经归档过（或正在处理）就丢掉副本，原文件还在原处
-                src.unlink(missing_ok=True)
                 self.db.update("jobs", job_id, {"status": "skipped", "staged_path": "", "decided_at": now(),
                                                 "result": {"dropped": True, "existing_name": (dup or pend).get(
                                                     "archive_name") or (pend or {}).get("original_name", "")}})
+                remove_file(src)
                 self._cleanup_inbox_dir(src.parent)
                 return job_id
             if dup or pend:
@@ -174,10 +278,10 @@ class Pipeline:
             if arch.get("done"):
                 return job_id
         try:
-            sug = self.analyze(src, task, job_id)
+            sug = self._analyze_limited(src, task, job_id)
         except Exception as e:
             traceback.print_exc()
-            sug = {"error": str(e)}
+            sug = {"error": str(e) or e.__class__.__name__, "confidence": 0}
         auto = float(config.get("auto_threshold"))
         review = float(config.get("review_threshold"))
         if arch:
@@ -188,11 +292,12 @@ class Pipeline:
         conf = float(sug.get("confidence") or 0)
         self.db.update("jobs", job_id, {"suggestion": sug, "confidence": conf, "method": sug.get("method", "")})
         pconf = float(sug.get("project_conf") or 0)
-        if task.origin and not task.keep_unmatched and not arch and not (sug.get("project_id") and pconf >= review):
+        if task.origin and not task.keep_unmatched and not arch and not sug.get("error") \
+                and not (sug.get("project_id") and pconf >= review):
             # 来源（微信等）里认不出项目的文件：多半是私人文件，忽略；原文件还在原处，记录里可以「拿来归档」
-            src.unlink(missing_ok=True)
             self.db.update("jobs", job_id, {"status": "ignored", "staged_path": "", "decided_at": now(),
                                             "result": {"ignored_reason": "认不出属于哪个项目"}})
+            remove_file(src)
             self._cleanup_inbox_dir(src.parent)
             return job_id
         try:
@@ -205,7 +310,10 @@ class Pipeline:
                 dst = src if src.parent == target_dir else naming.unique_path(target_dir / src.name)
                 if dst != src:
                     self._move(job_id, src, dst, "stage")
-                self.db.update("jobs", job_id, {"status": status, "staged_path": str(dst)})
+                upd = {"status": status, "staged_path": str(dst)}
+                if sug.get("error"):
+                    upd.update({"status": "error", "error": str(sug["error"])[:500]})
+                self.db.update("jobs", job_id, upd)
         except Exception as e:
             traceback.print_exc()
             self.db.update("jobs", job_id, {"status": "error", "error": str(e)[:500]})
@@ -311,7 +419,7 @@ class Pipeline:
         elif info.get("ocr_skip") and (is_pic or src.suffix.lower() == ".pdf"):
             evidence.append(f"只按文件名判断（{info['ocr_skip']}）")
 
-        type_code, type_conf, type_rank = self._keyword_type(src, text, evidence, info)
+        type_code, type_conf, type_rank, type_by = self._keyword_type(src, text, evidence, info)
         sig = self._keyword_project(hay_name, text, projects, task, evidence, type_code)
         status_kw = self._keyword_status(src.name, text)
         # 拍照/扫描的授权书、验收单、合同等，默认就是签字盖章版
@@ -320,7 +428,9 @@ class Pipeline:
                 and (type_code in S.SIGNED_TYPES or re.search(r"盖\s*章|签\s*字|签\s*章", text)):
             status_kw = "签字"
         # 学习到的类型规则
+        t0 = (type_code, type_conf)
         type_code, type_conf = self._apply_rule_types(hay_name, sig, type_code, type_conf, evidence)
+        type_by = self._by_change(type_by, t0, (type_code, type_conf), "规则")
         # 参考历史归档：相似文件沿用上次的项目和类型
         if config.get("history_enabled"):
             try:
@@ -329,7 +439,9 @@ class Pipeline:
                 traceback.print_exc()
                 hist = None
             if hist:
+                t0 = (type_code, type_conf)
                 type_code, type_conf = self._merge_history(hist, sig, type_code, type_conf, pmap, evidence)
+                type_by = self._by_change(type_by, t0, (type_code, type_conf), "历史归档")
 
         auto = float(config.get("auto_threshold"))
         use_jev = bool(config.get("jev_enabled") and config.get("jev_api_key")) and (
@@ -384,15 +496,18 @@ class Pipeline:
                 method = "Jev"
                 if sig.project_id == jid:
                     sig.conf = min(0.99, max(sig.conf, p, 0.93))
+                    sig.reason += " + Jev 印证"
                     evidence.append(f"Jev 与关键词结论一致（{p:.0%}）")
                 elif sig.project_id:
                     evidence.append(f"Jev 判断为 {pmap[jid]['label']}（{p:.0%}），与关键词结论不一致")
                     if p > sig.conf:
                         sig.project_id = jid
                     sig.conf = min(0.75, max(sig.conf, p))
+                    sig.reason = "Jev 与关键词不一致"
                 else:
                     sig.project_id = jid
                     sig.conf = round(p * 0.97, 3)
+                    sig.reason = "Jev"
                     evidence.append(f"Jev 判断项目：{pmap[jid]['label']}（{p:.0%}）")
             elif choice == "none":
                 evidence.append(f"Jev 认为不属于任何候选项目（{p:.0%}）")
@@ -403,14 +518,17 @@ class Pipeline:
                 method = "Jev"
                 if t == type_code:
                     type_conf = min(0.99, max(type_conf, p, 0.93))
+                    type_by = (type_by + " + Jev 印证") if type_by else "Jev"
                 elif type_conf < 0.3:
                     type_code, type_conf = t, round(p * 0.97, 3)
+                    type_by = "Jev"
                     evidence.append(f"Jev 判断类型：{S.TYPE_MAP[t]['name']}（{p:.0%}）")
                 else:
                     evidence.append(f"Jev 判断类型为 {S.TYPE_MAP[t]['name']}，与关键词不一致")
                     if p > type_conf:
                         type_code = t
                     type_conf = min(0.75, max(type_conf, p))
+                    type_by = "Jev 与关键词不一致"
                 type_rank = [(k, v) for k, v in ranked[:4]]
         status = status_kw
         if jev_res.get("status"):
@@ -461,7 +579,8 @@ class Pipeline:
         conf = round(min(sig.conf, type_conf), 3) if sig.project_id else 0.0
         return {
             "project_id": sig.project_id, "project_conf": round(sig.conf, 3),
-            "doc_type": type_code, "type_conf": round(type_conf, 3),
+            "project_by": sig.reason if sig.project_id else "",
+            "doc_type": type_code, "type_conf": round(type_conf, 3), "type_by": type_by,
             "type_candidates": [{"code": k, "name": S.TYPE_MAP[k]["name"], "p": round(v, 3)}
                                 for k, v in type_rank if k in S.TYPE_MAP][:4],
             "candidates": candidates, "title": title, "title_source": title_src,
@@ -470,6 +589,15 @@ class Pipeline:
             "evidence": evidence[:8], "errors": errors, "snippet": text[:400],
             "batch_label": task.batch_label, "ocr": bool(info.get("ocr") and text.strip()),
         }
+
+    @staticmethod
+    def _by_change(by: str, before: Tuple[str, float], after: Tuple[str, float], what: str) -> str:
+        """类型判断被规则 / 历史改动过：依据里记上一笔。"""
+        if after == before:
+            return by
+        if after[0] != before[0] or not by:
+            return what
+        return f"{by} + {what[:2]}印证" if after[1] > before[1] else by
 
     def _folder_hint(self, src: Path, task: Task) -> str:
         try:
@@ -486,7 +614,7 @@ class Pipeline:
         if task.preset_project_id and task.preset_project_id in pmap:
             p = pmap[task.preset_project_id]
             evidence.append(f"上传时指定项目：{p['label']}")
-            return Signal(p["id"], 1.0, "指定", p["customer_id"], True)
+            return Signal(p["id"], 1.0, "上传时指定", p["customer_id"], True)
         name_l = hay_name.lower()
         head = text[:3000]
         head_l = head.lower()
@@ -495,7 +623,7 @@ class Pipeline:
             no = p["project_no"]
             if no.lower() in name_l or no in head:
                 evidence.append(f"出现项目编号 {no}")
-                return Signal(p["id"], 1.0, "编号", p["customer_id"], True)
+                return Signal(p["id"], 1.0, "项目编号", p["customer_id"], True)
         # 2. 规则（手动记住的 + 自动学习的），长的优先
         for r in self.db.q("SELECT * FROM rules WHERE enabled=1 AND COALESCE(kind,'project')='project' "
                            "ORDER BY LENGTH(pattern) DESC"):
@@ -504,7 +632,7 @@ class Pipeline:
                 p = pmap[r["project_id"]]
                 auto = r.get("source") == "auto"
                 evidence.append(f"命中{'自动学习的' if auto else ''}规则「文件名包含 {r['pattern']}」")
-                s = Signal(p["id"], 0.97, "规则", p["customer_id"], True)
+                s = Signal(p["id"], 0.97, "自动学习的规则" if auto else "记住的规则", p["customer_id"], True)
                 s.rule_type = r.get("doc_type") or ""
                 s.rule_source = r.get("source") or "manual"
                 return s
@@ -532,7 +660,7 @@ class Pipeline:
             if batch and batch[0] in pmap:
                 p = pmap[batch[0]]
                 evidence.append(f"同批次文件已归入 {p['label']}")
-                return Signal(p["id"], 0.9, "批次", p["customer_id"])
+                return Signal(p["id"], 0.9, "同批次文件", p["customer_id"])
             return sig
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
         cid, top = ranked[0]
@@ -548,8 +676,9 @@ class Pipeline:
         if batch and batch[0] in {p["id"] for p in own}:
             p = pmap[batch[0]]
             evidence.append(f"同批次文件已归入 {p['label']}")
-            return Signal(p["id"], 0.92, "批次", cid, False, sig.candidates)
+            return Signal(p["id"], 0.92, "客户名 + 同批次文件", cid, False, sig.candidates)
         base = 0.95 if in_name.get(cid) else 0.84
+        sig.reason = "客户名（文件名）" if in_name.get(cid) else "客户名（正文）"
         if len(own) == 1:
             sig.project_id, sig.conf = own[0]["id"], base
             evidence.append("该客户只有一个在建项目")
@@ -582,29 +711,32 @@ class Pipeline:
             if clear:
                 sig.project_id = pr[0][0]
                 sig.conf = base - 0.02
+                sig.reason += " + 项目简称"
                 evidence.append(f"按项目简称/业务线区分为 {pmap[pr[0][0]]['label']}")
                 return sig
             sig.project_id = pr[0][0]
             sig.conf = 0.7
+            sig.reason += "，项目待确认"
             evidence.append(f"该客户有 {len(own)} 个在建项目，需确认")
             return sig
         sig.project_id = own[0]["id"]
         sig.conf = 0.65
+        sig.reason += "，分不清是哪个项目"
         evidence.append(f"该客户有 {len(own)} 个在建项目，无法区分")
         return sig
 
     def _keyword_type(self, src: Path, text: str, evidence: List[str],
-                      info: Optional[Dict] = None) -> Tuple[str, float, List[Tuple[str, float]]]:
+                      info: Optional[Dict] = None) -> Tuple[str, float, List[Tuple[str, float]], str]:
         ext = src.suffix.lower()
         info = info or {}
         if ext in S.IMAGE_EXT:
             doc = self._image_as_document(src, text, info, evidence)
             if doc:
-                return doc
+                return (*doc, "文件名关键词" if evidence and evidence[-1].startswith("图片文件名") else "图片里的标题")
             evidence.append("图片文件，按截图证据处理")
-            return "EVD-SHOT", 0.92, [("EVD-SHOT", 0.92)]
+            return "EVD-SHOT", 0.92, [("EVD-SHOT", 0.92)], "图片格式"
         if ext in S.SCAN_EXT:
-            return "EVD-SCAN", 0.95, [("EVD-SCAN", 0.95)]
+            return "EVD-SCAN", 0.95, [("EVD-SCAN", 0.95)], "扫描结果格式"
         code, conf, rank, where = self._type_by_keywords(src.name, text[:1500])
         # 扫描件：标题行写明了是什么文件（如「项目验收确认单」），以标题为准，可信度和文件名命中相当
         if info.get("ocr") and where != "文件名":
@@ -612,11 +744,11 @@ class Pipeline:
             if tcode:
                 evidence.append(f"扫描件标题「{tline[:24]}」：{S.TYPE_MAP[tcode]['name']}")
                 rank = [(tcode, 0.9)] + [(k, v) for k, v in rank if k != tcode][:3]
-                return tcode, 0.9, rank
+                return tcode, 0.9, rank, "扫描件标题"
         if code == "OTH-DOC":
-            return "OTH-DOC", 0.0, []
+            return "OTH-DOC", 0.0, [], ""
         evidence.append(f"类型关键词（{where}）：{S.TYPE_MAP[code]['name']}")
-        return code, conf, rank
+        return code, conf, rank, f"{where}关键词"
 
     def _title_type(self, text: str) -> Tuple[str, str]:
         """取前三行里第一行像标题的（不超过 40 字）判断文件类型；返回 (类型码, 标题行)。"""
@@ -740,22 +872,26 @@ class Pipeline:
             if sig.project_id is None:
                 if sig.customer_id in (None, hcust):
                     sig.project_id, sig.conf, sig.customer_id = hp, hc, hcust
+                    sig.reason = "历史归档" if not sig.reason else sig.reason + " + 历史归档"
                     evidence.append(f"与已归档的「{like}」相似，沿用项目 {label}")
                 else:
                     evidence.append(f"历史相似文件「{like}」属于 {label}，与识别到的客户不一致")
             elif sig.project_id == hp:
                 sig.conf = min(0.97, max(sig.conf, hc) + 0.04)
+                sig.reason += " + 历史印证"
                 evidence.append(f"历史文件印证：与「{like}」同属该项目")
             else:
                 same_cust = pmap[sig.project_id]["customer_id"] == hcust
                 if same_cust and sig.conf <= 0.8:
                     sig.project_id, sig.conf = hp, max(hc, sig.conf)
+                    sig.reason = "客户名 + 历史归档"
                     evidence.append(f"同一客户有多个项目，参考历史文件「{like}」选择 {label}")
                 else:
                     evidence.append(f"历史相似文件「{like}」属于 {label}，与关键词结论不一致")
                     if hc > sig.conf + 0.1:
                         sig.project_id = hp
                     sig.conf = min(sig.conf, 0.78)
+                    sig.reason += "（与历史不一致）"
             if hp not in sig.candidates:
                 sig.candidates.append(hp)
         ht, htc = hist.get("doc_type"), float(hist.get("type_conf") or 0)
@@ -973,6 +1109,7 @@ class Pipeline:
     # ------------------------------------------------------------ 工具
     def _move(self, job_id: int, src: Path, dst: Path, kind: str, data: Optional[Dict] = None) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
+        make_writable(src)              # 只读文件跨盘移动时删不掉原件
         shutil.move(str(src), str(dst))
         self.db.insert("operations", {"job_id": job_id, "kind": kind, "src": str(src), "dst": str(dst),
                                       "data": data or {}, "created_at": now()})

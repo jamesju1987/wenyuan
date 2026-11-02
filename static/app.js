@@ -118,6 +118,24 @@ const STATUS_TAG = {
   skipped: `<span class="tag">已跳过</span>`,
   unpacked: `<span class="tag blue">已解压</span>`,
 };
+// 把握：综合把握 = 项目把握和类型把握里较低的一个；鼠标停留时显示各自是靠什么判断出来的
+function confDetail(j) {
+  const s = j.suggestion || {};
+  const c = Math.round((j.confidence || 0) * 100);
+  const pc = Math.round((s.project_conf || 0) * 100), tc = Math.round((s.type_conf || 0) * 100);
+  const lines = [`综合把握 ${c}%（取下面两项里较低的一项）`,
+    `项目 ${pc}%${s.project_by ? `：${s.project_by}` : ""}`,
+    `类型 ${tc}%${s.type_by ? `：${s.type_by}` : ""}`];
+  if (j.method === "人工") lines.push("这是机器当时的把握，最后由你确认归档");
+  return { c, title: lines.join("\n") };
+}
+function confChip(j) {
+  const s = j.suggestion || {};
+  if (!s.project_id || !s.doc_type) return "";
+  const { c, title } = confDetail(j);
+  const lv = c >= 90 ? "hi" : c >= 60 ? "mid" : "lo";
+  return `<span class="conf ${lv}" title="${esc(title)}">把握 ${c}%<i><b style="width:${Math.max(c, 6)}%"></b></i></span>`;
+}
 const typeName = (code) => (S.std?.types || []).find((t) => t.code === code)?.name || code || "";
 const projLabel = (id) => S.projects.find((p) => p.id === id)?.label || "";
 const isWin = () => String(S.st?.platform || navigator.platform || "").toLowerCase().startsWith("win");
@@ -222,6 +240,17 @@ function renderOverview() {
   api("/api/jobs?limit=14").then(updateOverview).catch(() => {});
 }
 
+function rateTitle(c) {
+  const m = c.methods || {};
+  const total = Object.values(m).reduce((a, b) => a + b, 0);
+  const lines = ["自动归档率 = 自动归档的 ÷（已归档 + 待复核 + 未匹配）", "被忽略、重复、跳过的文件不算在内"];
+  if (total) {
+    lines.push("", `已归档 ${total} 个，分别靠：`);
+    for (const [k, v] of Object.entries(m)) lines.push(`${k === "人工" ? "人工确认" : k}　${v} 个（${Math.round((v / total) * 100)}%）`);
+  }
+  return lines.join("\n");
+}
+
 function updateStats() {
   const el = $("#stats");
   if (!el || !S.st) return;
@@ -229,7 +258,7 @@ function updateStats() {
   const rate = c.all_jobs ? Math.round((c.all_auto / c.all_jobs) * 100) : null;
   el.innerHTML = `
     <div class="stat blue"><div class="k">${ic("archive")}今日归档</div><div class="v">${c.today_archived}<small>个</small></div></div>
-    <div class="stat green"><div class="k">${ic("bolt")}自动归档率</div><div class="v">${rate === null ? "—" : rate}<small>${rate === null ? "" : "%"}</small></div></div>
+    <div class="stat green" title="${esc(rateTitle(c))}"><div class="k">${ic("bolt")}自动归档率</div><div class="v">${rate === null ? "—" : rate}<small>${rate === null ? "" : "%"}</small></div></div>
     <div class="stat orange link" onclick="S.reviewTab='pending_review';go('review')"><div class="k">${ic("review")}待复核</div><div class="v">${c.review}<small>个</small></div></div>
     <div class="stat red link" onclick="S.reviewTab='unmatched';go('review')"><div class="k">${ic("question")}未匹配</div><div class="v">${c.unmatched}<small>个</small></div></div>`;
 }
@@ -255,9 +284,10 @@ function jobRow(j) {
   if (j.status === "archived") {
     name = r.name || j.original_name;
     sub = `${j.original_name} → ${r.project || ""} / ${r.stage || ""}${r.replaced ? ` · 替换 ${r.replaced}` : ""}`;
-    right = `${METHOD_TAG(j.method)}`;
+    right = `${confChip(j)}${METHOD_TAG(j.method)}`;
   } else if (j.status === "pending_review") {
-    sub = `建议：${projLabel(s.project_id) || "—"} · ${typeName(s.doc_type)} · 把握 ${Math.round((j.confidence || 0) * 100)}%`;
+    sub = `建议：${projLabel(s.project_id) || "—"} · ${typeName(s.doc_type)}`;
+    right = confChip(j);
   } else if (j.status === "unmatched") {
     sub = "没有找到对应项目，需要手动指定";
   } else if (j.status === "duplicate") {
@@ -752,7 +782,7 @@ function reviewCard(j) {
   el.innerHTML = `
     <div class="card-top">${isImage(curName) && !j.missing && j.staged_path ? `<img class="thumb" alt="" loading="lazy" data-act="ql" title="快速查看" src="/api/download?path=${encodeURIComponent(j.staged_path)}">` : docIcon(curName)}
       <div class="meta"><div class="name selectable">${esc(curName)}</div><div class="sub">${renamed ? `已改名（原名 ${esc(j.original_name)}） · ` : ""}${fmtSize(j.size)} · ${esc(j.source || "")} · ${fmtTime(j.created_at)}${s.title_source && !renamed ? ` · 标题来自${esc(s.title_source)}` : ""}</div></div>
-      <div class="meter" title="综合把握">${j.status === "unmatched" ? "未找到项目" : `把握 ${conf}%`}<span class="bar"><i style="width:${Math.max(conf, 4)}%;background:${color}"></i></span></div>
+      <div class="meter" title="${esc(confDetail(j).title)}">${j.status === "unmatched" ? "未找到项目" : `把握 ${conf}%`}<span class="bar"><i style="width:${Math.max(conf, 4)}%;background:${color}"></i></span></div>
       <button class="btn plain icon" title="快速查看（空格）" data-act="ql">${ic("eye")}</button>
       <button class="btn plain icon" title="在${FM()}中显示" data-act="reveal">${ic("folder")}</button>
     </div>

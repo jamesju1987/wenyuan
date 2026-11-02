@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
-VER = sys.argv[1] if len(sys.argv) > 1 else "1.6.1"
+VER = sys.argv[1] if len(sys.argv) > 1 else "1.6.2"
 SIZE = sys.argv[2] if len(sys.argv) > 2 else "169"
 DAY = date.fromisoformat(sys.argv[3]) if len(sys.argv) > 3 else date.today()
 ZIP = f"Wenyuan-{VER}.zip"

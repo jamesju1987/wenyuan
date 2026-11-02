@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple
 
 from . import config, naming
 from .db import DB, now
-from .pipeline import Pipeline, Task, should_ignore
+from .pipeline import Pipeline, Task, make_writable, should_ignore
 
 try:
     from watchdog.events import FileSystemEventHandler
@@ -418,6 +418,7 @@ class SourceWatcher:
         stage = naming.unique_path(config.inbox() / ".来源" / naming.safe_dir_name(src.get("name") or "来源") / p.name)
         stage.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(p), str(stage))
+        make_writable(stage)            # 微信收到的文件是只读的，副本不能带着只读
         self.db.x("INSERT OR REPLACE INTO source_seen (path, size, mtime, source_id, seen_at) VALUES (?,?,?,?,?)",
                   (str(p), st.st_size, st.st_mtime, src.get("id", ""), now()))
         self.pipeline.submit(Task(path=str(stage), source=src.get("name") or "来源", origin=str(p),

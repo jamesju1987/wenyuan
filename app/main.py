@@ -52,11 +52,12 @@ async def lifespan(_app: FastAPI):
     watcher.start()
     source_watcher.start()
     try:
-        n = pipeline.recover_staging()
+        n = pipeline.recover_jobs() + pipeline.recover_staging()
         if n:
             print(f"继续处理上次没处理完的 {n} 个文件")
     except Exception as e:
         print("恢复临时文件失败：", e)
+    threading.Thread(target=pipeline.fix_readonly_archive, name="fix-readonly", daemon=True).start()
     yield
     watcher.stop()
     source_watcher.stop()
@@ -159,6 +160,9 @@ def state():
             "projects": c("SELECT COUNT(*) n FROM projects WHERE status!='已结项'"),
             "all_jobs": c("SELECT COUNT(*) n FROM jobs WHERE status IN ('archived','pending_review','unmatched')"),
             "all_auto": c("SELECT COUNT(*) n FROM jobs WHERE status='archived' AND method!='人工' AND method!='已撤销'"),
+            # 已归档的文件分别是靠什么归档的：关键词 / Jev / 加上 DeepSeek 起标题 / 人工确认
+            "methods": {r["method"] or "关键词": r["n"] for r in db.q(
+                "SELECT method, COUNT(*) n FROM jobs WHERE status='archived' GROUP BY method ORDER BY n DESC")},
         },
     }
 

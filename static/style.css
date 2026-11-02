@@ -241,6 +241,10 @@ input[type=range] { accent-color: var(--accent); width: 180px; }
 .file-row .right { display: flex; align-items: center; gap: 8px; flex: none; color: var(--secondary); font-size: 11.5px; }
 .file-row .acts { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
 .file-row:hover .acts { opacity: 1; }
+.conf { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }
+.conf i { display: block; width: 28px; height: 4px; border-radius: 2px; background: var(--fill-2); overflow: hidden; }
+.conf b { display: block; height: 100%; border-radius: 2px; }
+.conf.hi b { background: var(--green); } .conf.mid b { background: var(--orange); } .conf.lo b { background: var(--red); }
 .tag { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 5px; font-size: 11px; font-weight: 500; background: var(--fill); color: var(--secondary); white-space: nowrap; }
 .tag.blue { background: var(--accent-soft); color: var(--accent); }
 .tag.green { background: color-mix(in srgb, var(--green) 16%, transparent); color: color-mix(in srgb, var(--green) 75%, #000); }
