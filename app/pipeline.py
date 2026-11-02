@@ -8,6 +8,7 @@ import queue
 import re
 import shutil
 import stat
+import tempfile
 import threading
 import time
 import traceback
@@ -36,6 +37,7 @@ class Task:
     keep_unmatched: bool = True      # False：认不出项目就忽略（只删复制件），不进「未匹配」
     depth: int = 0                   # 压缩包嵌套层数
     force_unpack: bool = False
+    password: str = ""               # 复核卡片上输入的压缩包密码（整包归档时用来看里面的内容）
 
 
 @dataclass
@@ -273,7 +275,8 @@ class Pipeline:
                 self._cleanup_inbox_dir(src.parent)
                 return job_id
         arch: Dict = {}
-        if archives.kind_of(src) and config.get("unpack_enabled") and task.depth < 3:
+        unpack_mode = config.get("archive_mode") == "unpack" and config.get("unpack_enabled")
+        if archives.kind_of(src) and unpack_mode and task.depth < 3:
             arch = self._try_unpack(task, src, job_id)
             if arch.get("done"):
                 return job_id
@@ -289,10 +292,15 @@ class Pipeline:
             sug.setdefault("evidence", []).insert(0, arch["reason"])
             if arch["status"] in ("password", "error"):     # 让人看一眼：输入密码或决定整包归档
                 sug["confidence"] = min(float(sug.get("confidence") or 0), round(auto - 0.01, 2))
+        elif sug.get("archive"):
+            arch = sug["archive"]                          # 整包归档：看过里面的文件了
+        locked_pack = bool(arch) and arch.get("status") == "password" and (
+            arch.get("mode") != "whole" or float(sug.get("confidence") or 0) < auto)
         conf = float(sug.get("confidence") or 0)
         self.db.update("jobs", job_id, {"suggestion": sug, "confidence": conf, "method": sug.get("method", "")})
         pconf = float(sug.get("project_conf") or 0)
-        if task.origin and not task.keep_unmatched and not arch and not sug.get("error") \
+        if task.origin and not task.keep_unmatched and not sug.get("error") \
+                and not (arch and (arch.get("mode") != "whole" or locked_pack)) \
                 and not (sug.get("project_id") and pconf >= review):
             # 来源（微信等）里认不出项目的文件：多半是私人文件，忽略；原文件还在原处，记录里可以「拿来归档」
             self.db.update("jobs", job_id, {"status": "ignored", "staged_path": "", "decided_at": now(),
@@ -389,8 +397,12 @@ class Pipeline:
 
     # ------------------------------------------------------------ 识别
     def analyze(self, src: Path, task: Task, job_id: int) -> Dict:
-        info = extract.extract(src, ocr_enabled=bool(config.get("ocr_enabled")),
-                               pdf_pages=int(config.get("ocr_pdf_pages") or 2))
+        is_pack = bool(archives.kind_of(src))
+        if is_pack:
+            info = self._peek_archive(src, task)
+        else:
+            info = extract.extract(src, ocr_enabled=bool(config.get("ocr_enabled")),
+                                   pdf_pages=int(config.get("ocr_pdf_pages") or 2))
         text = info["text"]
         projects = P.candidate_projects(self.db)
         pmap = {p["id"]: p for p in projects}
@@ -401,16 +413,20 @@ class Pipeline:
                 pmap[p["id"]] = p
         folder = self._folder_hint(src, task)
         hay_name = f"{src.name} {folder}"
+        if is_pack:   # 压缩包里的文件名和压缩包自己的名字一样有分量（「资料.zip」里的「青岚医疗渗透测试报告.docx」）
+            hay_name += " " + " ".join(Path(n).name for n in info["archive_names"][:40])
         # 写明了项目编号的，结项很久的项目也要认（结项后才补回来的验收单、签字版很常见）
         hay_no = f"{hay_name} {text[:3000]}"
         for p in P.list_projects(self.db):
             if p["id"] not in pmap and p["project_no"] and p["project_no"] in hay_no:
                 projects.append(p)
                 pmap[p["id"]] = p
-        evidence: List[str] = []
+        evidence: List[str] = list(info.get("archive_evidence") or [])
         errors: List[str] = []
         is_pic = src.suffix.lower() in S.IMAGE_EXT
-        if info.get("ocr"):
+        if is_pack:
+            pass
+        elif info.get("ocr"):
             where = f"扫描件前 {info.get('ocr_pages', 1)} 页" if not is_pic else "图中"
             evidence.append(f"识别了{where}文字（{extract.meaningful_len(text)} 字，{info.get('ocr_ms', 0) / 1000:.1f} 秒）"
                             if text.strip() else f"{where}没有识别到文字")
@@ -419,7 +435,9 @@ class Pipeline:
         elif info.get("ocr_skip") and (is_pic or src.suffix.lower() == ".pdf"):
             evidence.append(f"只按文件名判断（{info['ocr_skip']}）")
 
-        type_code, type_conf, type_rank, type_by = self._keyword_type(src, text, evidence, info)
+        packed = self._archive_type(src, info["archive_names"], info.get("archive_sizes") or {}, evidence) \
+            if is_pack else None
+        type_code, type_conf, type_rank, type_by = packed or self._keyword_type(src, text, evidence, info)
         sig = self._keyword_project(hay_name, text, projects, task, evidence, type_code)
         status_kw = self._keyword_status(src.name, text)
         # 拍照/扫描的授权书、验收单、合同等，默认就是签字盖章版
@@ -448,7 +466,7 @@ class Pipeline:
             sig.conf < auto or type_conf < auto)
         is_evidence = S.TYPE_MAP.get(type_code, {}).get("evidence") and type_conf >= 0.85
         use_ds = bool(config.get("deepseek_enabled") and config.get("deepseek_api_key")) and not is_evidence \
-            and (text or not naming.is_garbage_title(src.stem))
+            and (text or not naming.is_garbage_title(archives.stem_of(src) if is_pack else src.stem))
         # DeepSeek 也判断：关键词（含规则、历史）拿不准的那一项才问；给它全部候选项目，让它独立判断
         ds_judge = use_ds and config.get("deepseek_judge") is not False
         ask_p = bool(ds_judge and not sig.locked and sig.conf < auto and projects)
@@ -563,16 +581,21 @@ class Pipeline:
         cust_short = proj["customer_short"] if proj else ""
         tname = S.TYPE_MAP.get(type_code, {}).get("name", "")
         title_src = "文件名"
+        stem = archives.stem_of(src) if is_pack else src.stem
         if S.TYPE_MAP.get(type_code, {}).get("evidence"):
-            raw_title, title_src = src.stem, "原文件名（证据保留原名）"
+            raw_title, title_src = stem, "原文件名（证据保留原名）"
         elif ds_res.get("title"):
             raw_title, title_src = ds_res["title"], "DeepSeek"
-        elif not naming.is_garbage_title(src.stem):
-            raw_title = src.stem
+        elif is_pack and info.get("archive_main") and not naming.is_garbage_title(info["archive_main"]) \
+                and self._generic_pack_name(stem, proj):
+            # 「资料.zip」「加密资料.zip」这类名字说明不了什么：用里面主要文件的名字
+            raw_title, title_src = info["archive_main"], "压缩包里的主要文件"
+        elif not naming.is_garbage_title(stem):
+            raw_title = stem
             # 文件名里只剩个笼统的叫法（「最终版(2)-评估报告-改」→「评估报告」），正文标题更具体时用正文标题
             cover = info.get("cover_title") or ""
             if cover and not naming.is_garbage_title(cover):
-                core_f, core_c = naming.clean_title(src.stem), naming.clean_title(cover)
+                core_f, core_c = naming.clean_title(stem), naming.clean_title(cover)
                 if len(core_c) > len(core_f) >= 2 and core_f in core_c:
                     raw_title, title_src = cover, ("图中文字" if info.get("ocr") else "封面")
         elif info.get("cover_title"):
@@ -603,6 +626,7 @@ class Pipeline:
             "sensitivity": sensitivity, "confidence": conf, "method": method,
             "evidence": evidence[:10], "errors": errors, "snippet": text[:400],
             "batch_label": task.batch_label, "ocr": bool(info.get("ocr") and text.strip()),
+            **({"archive": info["archive"]} if is_pack else {}),
         }
 
     # ------------------------------------------------------------ DeepSeek 判断的合并
@@ -709,6 +733,140 @@ class Pipeline:
         if after[0] != before[0] or not by:
             return what
         return f"{by} + {what[:2]}印证" if after[1] > before[1] else by
+
+    # ------------------------------------------------------------ 整包归档：只看不拆
+    def _peek_archive(self, src: Path, task: Task) -> Dict:
+        """解出压缩包里几份有代表性的文档读一读（临时目录，读完就删），供判断项目和类型。"""
+        pws = ([task.password] if task.password else []) + \
+            [p for p in (config.get("archive_passwords") or []) if p != task.password]
+        tmp = Path(tempfile.mkdtemp(prefix="wenyuan-peek-"))
+        texts, cover, read, ocr_used = [], "", [], False
+        try:
+            pk = archives.peek(src, tmp, pws)
+            for rel, f in pk.files:
+                try:
+                    inf = extract.extract(f, ocr_enabled=bool(config.get("ocr_enabled")),
+                                          pdf_pages=int(config.get("ocr_pdf_pages") or 2))
+                except Exception:
+                    continue
+                read.append(Path(rel).name)
+                ocr_used = ocr_used or bool(inf.get("ocr"))
+                body = (inf.get("text") or "").strip()
+                if body:
+                    texts.append(f"【{Path(rel).name}】\n{body[:1500]}")
+                cover = cover or inf.get("cover_title") or ""
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        names = pk.names
+        listing = "、".join(Path(n).name for n in names[:60])
+        text = (f"压缩包里的文件：{listing}\n\n" if listing else "") + "\n\n".join(texts)
+        n = len(names)
+        if pk.status == "ok":
+            ev = f"压缩包里有 {n} 个文件，看了其中 {len(read)} 个：{'、'.join(read)}" if read else \
+                f"压缩包里有 {n} 个文件，没有能读的文档，按文件名判断"
+        elif pk.status == "password":
+            ev = f"压缩包有密码，只看了里面的 {n} 个文件名" if n else "压缩包有密码，只按压缩包名称判断"
+        elif pk.status == "empty":
+            ev = "压缩包是空的"
+        else:
+            ev = f"没能打开压缩包（{pk.reason}），只按名称判断"
+        arch = {"mode": "whole", "status": pk.status, "kind": pk.kind, "count": n, "read": read,
+                "reason": ev if pk.status != "password" else "压缩包有密码：输入密码后看里面的文件再判断，或直接整包归档",
+                "password_used": bool(pk.password), "can_unpack": n > 0 or pk.status == "password"}
+        return {"text": text, "cover_title": cover, "meta_title": "", "kind": pk.kind, "ocr": ocr_used,
+                "archive": arch, "archive_names": names, "archive_sizes": pk.sizes, "archive_evidence": [ev],
+                "archive_main": self._pack_main(read, names, pk.sizes)}
+
+    def _archive_type(self, src: Path, names: List[str], sizes: Dict[str, int], evidence: List[str]):
+        """整包归档的压缩包是什么类型：压缩包名字写明了的为准；否则看里面的文件（按大小加权，主文件通常最大，
+        「报告 + 附件」按报告算）。拿不准返回 None，交给正文关键词。"""
+        code, conf, rank, _ = self._type_by_keywords(src.name, "")
+        if code != "OTH-DOC" and conf >= 0.85:
+            evidence.append(f"压缩包名称表明是{S.TYPE_MAP[code]['name']}")
+            return code, conf, rank, "压缩包名称"
+        files = [Path(n) for n in names]
+        n = len(files)
+        if not n:
+            return None
+        imgs = sum(1 for f in files if f.suffix.lower() in S.IMAGE_EXT)
+        machine = sum(1 for f in files if f.suffix.lower() in archives.MACHINE_EXT or f.suffix.lower() in S.SCAN_EXT)
+        if imgs >= n * 0.6:
+            evidence.append(f"压缩包里 {imgs}/{n} 个是图片，按截图证据整包归档")
+            return "EVD-SHOT", 0.92, [("EVD-SHOT", 0.92)], "压缩包里多是图片"
+        if archives.EVIDENCE_NAME.search(archives.stem_of(src)) or (n > 10 and machine >= n * 0.6):
+            evidence.append("像扫描结果、日志包，按扫描原始结果整包归档")
+            return "EVD-SCAN", 0.92, [("EVD-SCAN", 0.92)], "扫描结果包"
+        votes: Dict[str, float] = {}
+        count: Dict[str, int] = {}
+        for raw, f in zip(names, files):
+            c, cf, _, _ = self._type_by_keywords(f.name, "")
+            if c != "OTH-DOC" and cf >= 0.6:
+                votes[c] = votes.get(c, 0) + max(int(sizes.get(raw) or 0), 1024)
+                count[c] = count.get(c, 0) + 1
+        if not votes:
+            return None
+        ranked = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
+        top, k = ranked[0]
+        total = sum(votes.values())
+        stages = {S.TYPE_MAP[c]["stage"] for c in votes}
+        if k >= total * 0.6:
+            conf = 0.9
+            evidence.append(f"压缩包里的主要文件是{S.TYPE_MAP[top]['name']}（{count[top]}/{n} 个，按大小算占 {k / total:.0%}）")
+        elif len(stages) == 1:
+            conf = 0.9
+            evidence.append(f"压缩包里是同一阶段的几类文件（{'、'.join(S.TYPE_MAP[c]['name'] for c in votes)}），归入{next(iter(stages))}")
+        else:
+            conf = 0.75
+            evidence.append(f"压缩包里的文件类型比较杂（{'、'.join(S.TYPE_MAP[c]['name'] for c, _ in ranked[:4])}），请确认放哪类")
+        rank = [(c, round(v / total, 3)) for c, v in ranked[:4]]
+        return top, conf, rank, "压缩包里的文件名"
+
+    @staticmethod
+    def _pack_main(read: List[str], names: List[str], sizes: Dict[str, int]) -> str:
+        """压缩包里的主要文件名：读过的第一份文档；有密码没读成的，按名字和大小挑。"""
+        if read and Path(read[0]).suffix.lower() in archives.DOC_RANK:
+            return Path(read[0]).stem
+        pick = archives.pick_for_peek([(n, int(sizes.get(n) or 1)) for n in names], 1)
+        return Path(pick[0]).stem if pick and Path(pick[0]).suffix.lower() in archives.DOC_RANK else ""
+
+    GENERIC_PACK = re.compile(r"(新建|加密|压缩|打包|最新|最终|全部|相关|项目)*(资料|材料|附件|文件|文档)?(包|合集|汇总)?"
+                              r"(\(\d+\)|（\d+）|[-_ ]?\d+)?")
+
+    def _generic_pack_name(self, stem: str, proj: Optional[Dict]) -> bool:
+        """压缩包名字去掉客户名后只剩「资料」「附件」「加密资料」之类：说明不了内容。"""
+        if naming.is_garbage_title(stem):
+            return True
+        core = stem
+        if proj:
+            for nm in sorted({proj.get("customer_short") or "", proj.get("customer_full") or "",
+                              *(proj.get("aliases") or [])}, key=len, reverse=True):
+                if nm:
+                    core = core.replace(nm, "")
+        core = re.sub(r"[\s_\-—.·]+", "", core)
+        return not core or bool(self.GENERIC_PACK.fullmatch(core))
+
+    def repeek(self, job_id: int, password: str, remember: bool = False) -> None:
+        """复核卡片上输入密码：先验一下密码对不对，对了就带着密码重新识别（整包归档）。"""
+        job = self.db.one("SELECT * FROM jobs WHERE id=?", (job_id,))
+        if not job or job["status"] not in ("pending_review", "unmatched", "error"):
+            raise ValueError("只有待处理的压缩包可以用密码查看")
+        src = self.locate(job)
+        if src is None:
+            raise ValueError("找不到这个压缩包")
+        tmp = Path(tempfile.mkdtemp(prefix="wenyuan-peek-"))
+        try:
+            pk = archives.peek(src, tmp, [password])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        if pk.status == "password":
+            raise ValueError("密码不对")
+        if remember and password:
+            pws = list(config.get("archive_passwords") or [])
+            if password not in pws:
+                config.update({"archive_passwords": (pws + [password])[-20:]})
+        self.db.update("jobs", job_id, {"status": "processing"})
+        self.submit(Task(path=str(src), source=job["source"], batch_id=job["batch_id"] or None,
+                         rerun_job_id=job_id, password=password))
 
     def _folder_hint(self, src: Path, task: Task) -> str:
         try:
@@ -1058,7 +1216,8 @@ class Pipeline:
                 version = override
             else:
                 version = naming.next_version(doc["current_version"] if doc else None, status)
-            name = naming.build_name(proj["project_no"], f["doc_type"], title, version, status, doc_date, src.suffix)
+            name = naming.build_name(proj["project_no"], f["doc_type"], title, version, status, doc_date,
+                                     archives.suffix_of(src) if archives.kind_of(src) else src.suffix)
             dest = naming.unique_path(pdir / tdef["stage"] / name)
             if doc:
                 doc_id = doc["id"]

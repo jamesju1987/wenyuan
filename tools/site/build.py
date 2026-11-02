@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
-VER = sys.argv[1] if len(sys.argv) > 1 else "1.6.3"
+VER = sys.argv[1] if len(sys.argv) > 1 else "1.6.4"
 SIZE = sys.argv[2] if len(sys.argv) > 2 else "169"
 DAY = date.fromisoformat(sys.argv[3]) if len(sys.argv) > 3 else date.today()
 ZIP = f"Wenyuan-{VER}.zip"
@@ -43,7 +43,7 @@ ZH = dict(
     pillars_p="每份文件经过同样的四道工序。依据都写在明处，哪一步拿不准，就停下来问你。",
     pillars=(("认", "认得出", "按项目编号、客户名称和别名、交付物关键词逐层判断。同一客户有几个在建项目，就看业务线和项目关键词。照片和扫描件先在本机识别文字。"),
              ("名", "起好名", "项目编号、类型码、标题、版本、状态、日期一次排好，去掉「最终版」「(2)」「改」这类字样。同一份文档再放进来，自动升版本，旧版移进「_历史版本」。"),
-             ("收", "收得全", "拖进网页、放进收件箱、在资源管理器里右键「发送到」都行，也可以让它盯着微信和企业微信收到的文件。压缩包自动解压，逐个归档。"),
+             ("收", "收得全", "拖进网页、放进收件箱、在资源管理器里右键「发送到」都行，也可以让它盯着微信和企业微信收到的文件。压缩包看一眼里面的文件，认出项目后整包改名归档。"),
              ("找", "找得到", "按客户、项目、阶段分栏浏览，像翻书架。搜索允许中间隔字，「青岚评估」就能找到「青岚医疗数据安全风险评估报告」；选项目时打拼音首字母就行。")),
     naming_h=("一个文件名，", "把六件事说清楚。"),
     naming_p="谁来归档都是一个样。交付、审计、交接的时候，不用再逐个改名、对版本。",
@@ -105,7 +105,7 @@ ZH = dict(
     faq_h="常见问题",
     faq=(("不配置 AI 能用吗？", "能。项目编号、客户名称和别名、交付物关键词、学会的规则和以前的归档记录已经能处理大部分文件。配置 Jev 后，关键词判断不了时让它在候选项目里做选择；配置 DeepSeek 后，它会读正文开头，生成更准确的标题和日期。"),
          ("会把我的文件传到网上吗？", "不会。文渊运行在你的电脑上，图片文字识别也在本机完成。只有你打开了 AI 功能，才会把文件名和正文开头（默认 1500 字）发给你自己配置的模型服务，原文件不上传。"),
-         ("支持哪些文件？", "Word（docx）、Excel、PowerPoint、PDF（包括扫描版）、文本，以及 JPG、PNG、HEIC 等图片。zip、7z、tar 压缩包会自动解压；rar 需要电脑上装有 7-Zip 或 WinRAR。老的 .doc 在 Mac 上能读内容，在 Windows 上按文件名判断。"),
+         ("支持哪些文件？", "Word（docx）、Excel、PowerPoint、PDF（包括扫描版）、文本，以及 JPG、PNG、HEIC 等图片。zip、7z、tar、rar 压缩包会看里面的文件判断项目，整包改名归档，也可以设置成解压后逐个归档；rar 需要电脑上装有 7-Zip 或 WinRAR。老的 .doc 在 Mac 上能读内容，在 Windows 上按文件名判断。"),
          ("归档错了怎么办？", "在「概览」或「处理记录」里点撤销，文件回到待复核，被替代的旧版本恢复原位。你改正之后，相关的自动规则会停用，不会一错再错。"),
          ("同一个客户出现了两个文件夹？", "一般是换过数据库，或者同一客户在 CRM 里有两种写法。在「项目」里点「整理重复客户」：按项目编号能确定的默认勾选，合并时文件只移动不删除，内容完全相同的只留一份。"),
          ("需要联网吗？", "第一次启动要联网安装依赖（默认从清华镜像下载）。之后除了 AI 功能，都可以离线使用。"),
@@ -137,7 +137,7 @@ EN = dict(
     pillars_p="Every file goes through the same four steps. The reasoning is always on show, and whenever a step is uncertain, it stops and asks.",
     pillars=(("认", "Recognise", "Project numbers first, then client names and aliases, then deliverable keywords. When a client has several active projects, business line and project keywords decide. Photos and scans are read on your machine first."),
              ("名", "Name", "Project number, type code, title, version, status and date, in that order, every time. Noise like “final”, “(2)” or “edited” is stripped. Drop in a newer copy and the version goes up; the old one moves to the history folder."),
-             ("收", "Collect", "Drag files into the page, drop them in the inbox folder, use right-click Send to on Windows, or let it pick up files you receive in WeChat and WeCom. Archives are unpacked and filed one by one."),
+             ("收", "Collect", "Drag files into the page, drop them in the inbox folder, use right-click Send to on Windows, or let it pick up files you receive in WeChat and WeCom. Archives are opened just enough to tell which project they belong to, then filed whole under a standard name."),
              ("找", "Find", "Browse client, project and stage in columns, like a bookshelf. Search tolerates gaps between characters, and project pickers accept pinyin initials.")),
     naming_h=("One file name.", "Six facts."),
     naming_p="Whoever files it, it comes out the same. No more renaming or reconciling versions at hand-over or audit time.",
@@ -199,7 +199,7 @@ EN = dict(
     faq_h="Questions",
     faq=(("Does it work without AI?", "Yes. Project numbers, client names and aliases, deliverable keywords, learned rules and your filing history handle most files. With Jev configured, it chooses among candidate projects when keywords can’t decide; with DeepSeek, it reads the opening text to produce better titles and dates."),
          ("Are my files uploaded anywhere?", "No. Wenyuan runs on your computer, and text in images is recognised locally. Only if you switch on AI are the file name and opening text (1,500 characters by default) sent to the model service you configured. Files themselves are never uploaded."),
-         ("Which files does it handle?", "Word (docx), Excel, PowerPoint, PDF (including scans), plain text, and images such as JPG, PNG and HEIC. zip, 7z and tar archives are unpacked automatically; rar needs 7-Zip or WinRAR installed. The content of legacy .doc files is read on macOS; on Windows they are judged by file name."),
+         ("Which files does it handle?", "Word (docx), Excel, PowerPoint, PDF (including scans), plain text, and images such as JPG, PNG and HEIC. For zip, 7z, tar and rar archives it reads a few files inside to find the project, then files the whole archive under a standard name (or unpacks and files each item, if you prefer); rar needs 7-Zip or WinRAR installed. The content of legacy .doc files is read on macOS; on Windows they are judged by file name."),
          ("What if something is filed wrong?", "Undo it from Overview or Activity. The file goes back to Review and any version it replaced is restored. Once you correct it, the automatic rule behind the mistake is switched off."),
          ("One client ended up with two folders?", "Usually after a database reset, or when a client is spelled two ways in your CRM. Open Projects and choose Tidy Duplicates: folders matched by project number are pre-selected, files are only moved, never deleted, and identical copies are kept once."),
          ("Does it need the internet?", "Only the first time, to install dependencies (from a mirror in mainland China by default). After that, everything except the AI features works offline."),

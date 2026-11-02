@@ -46,7 +46,8 @@ DEFAULTS: Dict[str, Any] = {
     "learn_min_samples": 2,          # 同类文件人工确认几次后生成规则
     "ocr_enabled": True,             # 识别图片和扫描件里的文字（本地离线）
     "ocr_pdf_pages": 2,              # 扫描版 PDF 识别前几页
-    "unpack_enabled": True,          # 压缩包自动解压后逐个归档
+    "archive_mode": "whole",         # 压缩包：whole 整包归档（看里面几份文件判断项目，整个包改名归档）/ unpack 解压后逐个归档
+    "unpack_enabled": True,          # 逐个归档模式下是否自动解压
     "unpack_max_files": 30,          # 超过这么多文件的压缩包整体归档
     "keep_archives": True,           # 解压后原压缩包移到 _原始压缩包
     "archive_passwords": [],         # 记住的解压密码，自动尝试

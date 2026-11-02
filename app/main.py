@@ -199,6 +199,7 @@ class SettingsIn(BaseModel):
     learn_min_samples: Optional[int] = None
     ocr_enabled: Optional[bool] = None
     ocr_pdf_pages: Optional[int] = None
+    archive_mode: Optional[str] = None
     unpack_enabled: Optional[bool] = None
     unpack_max_files: Optional[int] = None
     keep_archives: Optional[bool] = None
@@ -221,6 +222,8 @@ def save_settings(body: SettingsIn):
         changes["archive_root"] = str(Path(changes["archive_root"]).expanduser())
     if "source_unmatched" in changes and changes["source_unmatched"] not in ("ignore", "keep"):
         changes.pop("source_unmatched")
+    if "archive_mode" in changes and changes["archive_mode"] not in ("whole", "unpack"):
+        changes.pop("archive_mode")
     config.update(changes)
     if restart:
         P.ensure_all_dirs(db)
@@ -715,6 +718,15 @@ class UnpackIn(BaseModel):
 @app.post("/api/jobs/{job_id}/unpack")
 def job_unpack(job_id: int, body: UnpackIn):
     return {"count": pipeline.unpack_job(job_id, body.password, body.remember)}
+
+
+@app.post("/api/jobs/{job_id}/peek")
+def job_peek(job_id: int, body: UnpackIn):
+    """整包归档的加密压缩包：输入密码，看里面的文件重新识别。"""
+    if not body.password:
+        raise HTTPException(400, "请输入密码")
+    pipeline.repeek(job_id, body.password, body.remember)
+    return {"ok": True}
 
 
 @app.post("/api/jobs/{job_id}/reimport")

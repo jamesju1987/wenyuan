@@ -1,6 +1,8 @@
-"""压缩包解压：zip（含 Windows 中文文件名、加密包）、7z、tar 系列、rar（借助本机已装的 7-Zip / WinRAR / tar）。
+"""压缩包：zip（含 Windows 中文文件名、加密包）、7z、tar 系列、rar（借助本机已装的 7-Zip / WinRAR / tar）。
 
-规则：
+两种处理方式（设置里选）：
+- 整包归档（默认）：peek() 只解出里面几份有代表性的文档读一读，判断项目和类型，整个压缩包按规范改名归档。
+- 解压后逐个归档：unpack() 全部解开，每个文件单独识别。规则：
 - 文件不多（默认 ≤ 30 个）的资料包：解压后逐个识别归档。
 - 扫描结果包、日志包、文件很多的包：不拆，整体当一个文件归档（卡片上可以手动「解压后逐个归档」）。
 - 加密包：先试记住的密码，不行就在待复核卡片上输入密码。
@@ -341,6 +343,176 @@ def _precheck(path: Path, entries: List[Tuple[str, int]], max_files: int, force:
     if n > max_files:
         return Result("whole", count=n, reason=f"压缩包里有 {n} 个文件，超过 {max_files} 个，整体归档")
     return None
+
+
+def suffix_of(path: Path) -> str:
+    """压缩包的完整后缀（.tar.gz 这类双后缀不丢），改名归档时用。"""
+    n = path.name.lower()
+    for suf, _ in _SUFFIXES:
+        if n.endswith(suf):
+            return path.name[-len(suf):]
+    return path.suffix
+
+
+# ---------------------------------------------------------------- 只看不拆（整包归档时用）
+DOC_RANK = {".docx": 0, ".pdf": 1, ".pptx": 2, ".xlsx": 3, ".xlsm": 3, ".doc": 4, ".md": 5, ".txt": 6}
+PEEK_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff"}
+PEEK_MAX_DOC = 30 * 1024 ** 2
+PEEK_MAX_EXTERNAL = 300 * 1024 ** 2    # rar 等要靠外部工具整体解开才能看，太大就只看名字
+
+
+@dataclass
+class Peek:
+    status: str                       # ok | password（有密码，只拿到文件名或什么都没拿到）| error | empty
+    names: List[str] = field(default_factory=list)            # 里面所有文件的相对路径
+    files: List[Tuple[str, Path]] = field(default_factory=list)  # 解出来读的几份：(相对路径, 临时文件)
+    reason: str = ""
+    password: Optional[str] = None
+    kind: str = ""
+    sizes: dict = field(default_factory=dict)                 # 相对路径 → 解压后大小
+
+
+def pick_for_peek(entries: Sequence[Tuple[str, int]], limit: int = 3) -> List[str]:
+    """挑几份最能说明问题的：文档优先（docx > pdf > pptx > xlsx …），浅层目录、内容多的优先；没有文档时挑一张图片。"""
+    docs = [(n, s) for n, s in entries if Path(n).suffix.lower() in DOC_RANK and 0 < s <= PEEK_MAX_DOC]
+    docs.sort(key=lambda e: (DOC_RANK[Path(e[0]).suffix.lower()], e[0].count("/"), -e[1]))
+    out = [n for n, _ in docs[:limit]]
+    if not out:
+        imgs = [(n, s) for n, s in entries if Path(n).suffix.lower() in PEEK_IMAGE_EXT and 0 < s <= 15 * 1024 ** 2]
+        imgs.sort(key=lambda e: (e[0].count("/"), -e[1]))
+        out = [n for n, _ in imgs[:1]]
+    return out
+
+
+def peek(path: Path, dest: Path, passwords: Sequence[str] = (), limit: int = 3) -> Peek:
+    """列出压缩包里的文件，并把挑中的几份解到 dest（临时目录，用完由调用方删）。不改动压缩包本身。"""
+    k = kind_of(path)
+    if not k:
+        return Peek("error", reason="不是压缩包")
+    tries: List[Optional[str]] = [None] + [p for p in passwords if p]
+    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        if k == "zip":
+            try:
+                return _zip_peek(path, dest, tries, limit)
+            except ArchiveError as e:
+                tool = _external_tool()
+                if "AES" not in str(e) or not tool or tool[1] != "7z":
+                    raise
+                return _external_peek(path, dest, tries, limit, "zip")
+        if k == "tar":
+            return _tar_peek(path, dest, limit)
+        if k == "7z":
+            try:
+                import py7zr  # noqa: F401
+                return _7z_peek(path, dest, tries, limit)
+            except ImportError:
+                return _external_peek(path, dest, tries, limit, "7z")
+        return _external_peek(path, dest, tries, limit, "rar")
+    except NeedPassword as e:
+        return Peek("password", reason=str(e), kind=k)
+    except (ArchiveError, zipfile.BadZipFile, tarfile.TarError, OSError, EOFError) as e:
+        return Peek("error", reason=str(e) or type(e).__name__, kind=k)
+
+
+def _zip_peek(path: Path, dest: Path, tries, limit: int) -> Peek:
+    with _zip_open(path) as zf:
+        members = _zip_members(zf)
+        names = [rel for _, rel in members]
+        if not members:
+            return Peek("empty", reason="压缩包是空的", kind="zip")
+        try:
+            pw, pwb = _zip_check_password(zf, members, tries)
+        except NeedPassword:
+            # zip 加密的只是内容，文件名还能看到，先拿文件名判断
+            return Peek("password", names=names, reason="压缩包有密码，只看了里面的文件名", kind="zip",
+                        sizes={rel: zi.file_size for zi, rel in members})
+        by_rel = {rel: zi for zi, rel in members}
+        files = []
+        for rel in pick_for_peek([(rel, zi.file_size) for zi, rel in members], limit):
+            out = _target(dest, rel)
+            with zf.open(by_rel[rel], pwd=pwb) as fsrc, open(out, "wb") as fdst:
+                _copy_limited(fsrc, fdst, 0)
+            files.append((rel, out))
+        return Peek("ok", names, files, password=pw, kind="zip", sizes={rel: zi.file_size for zi, rel in members})
+
+
+def _tar_peek(path: Path, dest: Path, limit: int) -> Peek:
+    with tarfile.open(str(path), "r:*") as tf:
+        members = [(m, _safe_rel(m.name)) for m in tf.getmembers() if m.isfile()]
+        members = [(m, rel) for m, rel in members if rel]
+        if not members:
+            return Peek("empty", reason="压缩包是空的", kind="tar")
+        by_rel = {rel: m for m, rel in members}
+        files = []
+        for rel in pick_for_peek([(rel, m.size) for m, rel in members], limit):
+            src = tf.extractfile(by_rel[rel])
+            if src is None:
+                continue
+            out = _target(dest, rel)
+            with src, open(out, "wb") as fdst:
+                _copy_limited(src, fdst, 0)
+            files.append((rel, out))
+        return Peek("ok", [rel for _, rel in members], files, kind="tar", sizes={rel: m.size for m, rel in members})
+
+
+def _7z_peek(path: Path, dest: Path, tries, limit: int) -> Peek:
+    import py7zr
+    seen: List[str] = []
+    for pw in tries:
+        try:
+            with py7zr.SevenZipFile(str(path), mode="r", password=pw) as z:
+                encrypted = z.needs_password()
+                infos = [(i.filename, _safe_rel(i.filename), int(i.uncompressed or 0)) for i in z.list() if not i.is_directory]
+        except Exception:
+            continue                          # 文件名也加密了：没有密码打不开
+        infos = [(raw, rel, size) for raw, rel, size in infos if rel]
+        if not infos:
+            return Peek("empty", reason="压缩包是空的", kind="7z")
+        names = [rel for _, rel, _ in infos]
+        sizes = {rel: size for _, rel, size in infos}
+        seen = seen or names
+        if encrypted and pw is None:
+            if len(tries) == 1:
+                return Peek("password", names=names, reason="压缩包有密码，只看了里面的文件名", kind="7z", sizes=sizes)
+            continue
+        pick = pick_for_peek([(rel, size) for _, rel, size in infos], limit)
+        raw_of = {rel: raw for raw, rel, _ in infos}
+        tmp = Path(tempfile.mkdtemp(dir=str(dest), prefix=".7z-"))
+        try:
+            with py7zr.SevenZipFile(str(path), mode="r", password=pw) as z:
+                z.extract(path=str(tmp), targets=[raw_of[r] for r in pick])
+            files = []
+            for rel in pick:
+                p = tmp.joinpath(*raw_of[rel].replace("\\", "/").split("/"))
+                if p.is_file():
+                    out = _target(dest, rel)
+                    shutil.move(str(p), str(out))
+                    files.append((rel, out))
+            return Peek("ok", names, files, password=pw, kind="7z", sizes=sizes)
+        except Exception:
+            if encrypted:
+                continue                      # 密码不对
+            return Peek("ok", names, [], reason="里面的文件没能读出来，只看了文件名", kind="7z")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    if seen:
+        return Peek("password", names=seen, reason="压缩包有密码，只看了里面的文件名", kind="7z")
+    raise NeedPassword("压缩包有密码")
+
+
+def _external_peek(path: Path, dest: Path, tries, limit: int, kind: str) -> Peek:
+    """rar 等：外部工具没有统一的列目录格式，整体解到临时目录再挑（太大的只按名字判断）。"""
+    if path.stat().st_size > PEEK_MAX_EXTERNAL:
+        return Peek("error", reason="压缩包太大，没有打开看内容", kind=kind)
+    full = dest / ".all"
+    r = _external_extract(path, full, tries, MAX_FILES, True, kind)
+    if r.status != "ok":
+        return Peek("empty" if r.count == 0 else "error", reason=r.reason, kind=kind)
+    entries = [(str(p.relative_to(full)).replace("\\", "/"), p.stat().st_size) for p in r.files]
+    by_rel = dict(zip([e[0] for e in entries], r.files))
+    files = [(rel, by_rel[rel]) for rel in pick_for_peek(entries, limit)]
+    return Peek("ok", [e[0] for e in entries], files, password=r.password, kind=kind, sizes=dict(entries))
 
 
 def unpack(path: Path, dest: Path, passwords: Sequence[str] = (), max_files: int = 30, force: bool = False) -> Result:

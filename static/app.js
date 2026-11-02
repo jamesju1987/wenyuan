@@ -793,7 +793,8 @@ function reviewCard(j) {
     ${renamed ? `<div class="chips"><span class="chip">文件已改名，可点「重新识别」按新名字识别</span></div>` : ""}
     ${(s.archive?.can_unpack || s.archive?.status === "password") && !j.missing ? `<div class="arch-row">${ic("archive")}<span class="grow">${esc(s.archive.reason)}</span>
       ${s.archive.status === "password" ? `<input class="field mono" type="password" data-pw placeholder="解压密码" autocomplete="off"><label class="remember-pw"><input type="checkbox" data-pw-remember>记住</label>` : ""}
-      <button class="btn" data-act="unpack">${s.archive.status === "password" ? "解压" : "解压后逐个归档"}</button></div>` : ""}
+      ${s.archive.mode === "whole" && s.archive.status === "password" ? `<button class="btn" data-act="peek" title="用密码看里面的文件，重新判断项目，仍然整包归档">用密码识别</button>` : ""}
+      <button class="btn ${s.archive.mode === "whole" ? "plain" : ""}" data-act="unpack" title="把压缩包拆开，里面每个文件单独识别归档">${s.archive.status === "password" && s.archive.mode !== "whole" ? "解压" : "解压后逐个归档"}</button></div>` : ""}
     <div class="form">
       <label>项目</label><div class="full combo-host" data-combo="project"></div>
       <label>类型</label><div class="combo-host" data-combo="type"></div>
@@ -867,7 +868,19 @@ function reviewCard(j) {
       } catch (e) { unpackBtn.disabled = false; fail(e); pw?.select(); }
     };
     unpackBtn.onclick = doUnpack;
-    $("[data-pw]", el)?.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); doUnpack(); } });
+    const peekBtn = $('[data-act="peek"]', el);
+    const doPeek = async () => {
+      const pw = $("[data-pw]", el);
+      if (!pw?.value) { pw?.focus(); return; }
+      peekBtn.disabled = true;
+      try {
+        await api(`/api/jobs/${j.id}/peek`, { json: { password: pw.value, remember: !!$("[data-pw-remember]", el)?.checked } });
+        toast("密码正确", "正在看压缩包里的文件，重新识别…");
+        removeCard(el); S.sig = ""; tick();
+      } catch (e) { peekBtn.disabled = false; fail(e); pw.select(); }
+    };
+    if (peekBtn) peekBtn.onclick = doPeek;
+    $("[data-pw]", el)?.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.stopPropagation(); (peekBtn ? doPeek : doUnpack)(); } });
   }
   $$('[data-act="ql"]', el).forEach((b) => (b.onclick = () => openPath(j.staged_path, "quicklook")));
   $('[data-act="reveal"]', el).onclick = () => openPath(j.staged_path, "reveal");
@@ -1321,9 +1334,9 @@ async function renderSettings() {
 
     <div class="group-title">${ic("archive")}压缩包</div>
     <div class="group">
-      <div class="row"><div class="grow"><div>自动解压</div><div class="desc">zip、7z、rar、tar 解压后逐个识别归档，同一个包里的文件互相参考归属</div></div><label class="switch"><input type="checkbox" id="st-unpack" ${s.unpack_enabled ? "checked" : ""}><span></span></label></div>
-      <div class="row"><div class="grow"><div>整包归档的文件数</div><div class="desc">超过这个数，或者像扫描结果、日志的包，不拆开，整体当一个文件归档（卡片上仍可手动解压）</div></div><input class="field" id="st-unpack-n" type="number" min="5" max="200" value="${s.unpack_max_files}" style="width:70px"><span class="val">个</span></div>
-      <div class="row"><div class="grow"><div>保留原压缩包</div><div class="desc">解压后把原压缩包移到归档库的「_原始压缩包」，关闭则直接删除</div></div><label class="switch"><input type="checkbox" id="st-keep-arch" ${s.keep_archives ? "checked" : ""}><span></span></label></div>
+      <div class="row"><div class="grow"><div>压缩包怎么归档</div><div class="desc" id="st-arch-desc">${s.archive_mode === "unpack" ? "全部解压，每个文件单独识别归档；同一个包里的文件互相参考归属" : "解出里面几份文档看一眼，判断属于哪个项目、什么类型，然后整个压缩包按规范改名归档，不拆开"}</div></div><div class="segmented" id="st-arch-mode"><button data-v="whole" class="${s.archive_mode !== "unpack" ? "on" : ""}">整包归档</button><button data-v="unpack" class="${s.archive_mode === "unpack" ? "on" : ""}">解压后逐个归档</button></div></div>
+      <div class="row arch-unpack ${s.archive_mode === "unpack" ? "" : "hidden"}"><div class="grow"><div>整包归档的文件数</div><div class="desc">超过这个数，或者像扫描结果、日志的包，不拆开，整体当一个文件归档（卡片上仍可手动解压）</div></div><input class="field" id="st-unpack-n" type="number" min="5" max="200" value="${s.unpack_max_files}" style="width:70px"><span class="val">个</span></div>
+      <div class="row arch-unpack ${s.archive_mode === "unpack" ? "" : "hidden"}"><div class="grow"><div>保留原压缩包</div><div class="desc">解压后把原压缩包移到归档库的「_原始压缩包」，关闭则直接删除</div></div><label class="switch"><input type="checkbox" id="st-keep-arch" ${s.keep_archives ? "checked" : ""}><span></span></label></div>
       <div class="row"><div class="grow"><div>记住的解压密码</div><div class="desc">遇到加密包先自动试这些密码；在待复核卡片上输入密码时勾选「记住」即可添加</div></div><span class="val">${s.archive_passwords_count} 个</span><button class="btn" id="st-pw-clear" ${s.archive_passwords_count ? "" : "disabled"}>清空</button></div>
     </div>
 
@@ -1385,7 +1398,14 @@ async function renderSettings() {
   $("#st-learn").addEventListener("change", (e) => save({ learn_enabled: e.target.checked }, e.target.checked ? "已开启自动学习规则" : "已关闭自动学习规则"));
   $("#st-learn-n").addEventListener("change", (e) => save({ learn_min_samples: Math.max(2, Math.min(5, Number(e.target.value) || 2)) }));
   $("#st-chars").addEventListener("change", (e) => save({ text_chars_for_ai: Number(e.target.value) }));
-  $("#st-unpack").addEventListener("change", (e) => save({ unpack_enabled: e.target.checked }, e.target.checked ? "已开启自动解压" : "已关闭自动解压"));
+  $$("#st-arch-mode button").forEach((b) => (b.onclick = () => {
+    const unpack = b.dataset.v === "unpack";
+    $$("#st-arch-mode button").forEach((x) => x.classList.toggle("on", x === b));
+    $$(".arch-unpack").forEach((r) => r.classList.toggle("hidden", !unpack));
+    $("#st-arch-desc").textContent = unpack ? "全部解压，每个文件单独识别归档；同一个包里的文件互相参考归属"
+      : "解出里面几份文档看一眼，判断属于哪个项目、什么类型，然后整个压缩包按规范改名归档，不拆开";
+    save({ archive_mode: b.dataset.v, ...(unpack ? { unpack_enabled: true } : {}) }, unpack ? "压缩包会解压后逐个归档" : "压缩包会整包改名归档");
+  }));
   $("#st-unpack-n").addEventListener("change", (e) => save({ unpack_max_files: Math.max(5, Math.min(200, Number(e.target.value) || 30)) }));
   $("#st-keep-arch").addEventListener("change", (e) => save({ keep_archives: e.target.checked }));
   $("#st-pw-clear").onclick = () => sheet(`<h2>清空记住的解压密码？</h2><p class="intro">以后遇到加密压缩包需要重新输入密码。</p>`,
