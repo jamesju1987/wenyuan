@@ -191,6 +191,7 @@ class SettingsIn(BaseModel):
     deepseek_api_key: Optional[str] = None
     deepseek_model: Optional[str] = None
     deepseek_base_url: Optional[str] = None
+    deepseek_judge: Optional[bool] = None
     text_chars_for_ai: Optional[int] = None
     recent_project_days: Optional[int] = None
     history_enabled: Optional[bool] = None

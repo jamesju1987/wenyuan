@@ -38,6 +38,7 @@ DEFAULTS: Dict[str, Any] = {
     "deepseek_api_key": "",
     "deepseek_base_url": "https://api.deepseek.com",
     "deepseek_model": "deepseek-v4-flash",
+    "deepseek_judge": True,          # 关键词拿不准时，DeepSeek 也判断项目和类型（会发送候选项目清单）
     "text_chars_for_ai": 1500,       # 发给模型的正文长度
     "recent_project_days": 90,       # 结项多少天内仍作为候选项目
     "history_enabled": True,         # 参考历史归档：相似文件沿用上次的项目和类型

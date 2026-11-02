@@ -250,6 +250,9 @@ input[type=range] { accent-color: var(--accent); width: 180px; }
 .tag.green { background: color-mix(in srgb, var(--green) 16%, transparent); color: color-mix(in srgb, var(--green) 75%, #000); }
 .tag.orange { background: color-mix(in srgb, var(--orange) 16%, transparent); color: color-mix(in srgb, var(--orange) 80%, #000); }
 .tag.red { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.tag.teal { background: color-mix(in srgb, #14a3a3 15%, transparent); color: #0f8585; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.teal { color: #3cc8c8; } }
+:root[data-theme="dark"] .tag.teal { color: #3cc8c8; }
 .tag.purple { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.green { color: var(--green); } :root:not([data-theme="light"]) .tag.orange { color: var(--orange); } }
 

@@ -449,6 +449,10 @@ class Pipeline:
         is_evidence = S.TYPE_MAP.get(type_code, {}).get("evidence") and type_conf >= 0.85
         use_ds = bool(config.get("deepseek_enabled") and config.get("deepseek_api_key")) and not is_evidence \
             and (text or not naming.is_garbage_title(src.stem))
+        # DeepSeek 也判断：关键词（含规则、历史）拿不准的那一项才问；给它全部候选项目，让它独立判断
+        ds_judge = use_ds and config.get("deepseek_judge") is not False
+        ask_p = bool(ds_judge and not sig.locked and sig.conf < auto and projects)
+        ask_t = bool(ds_judge and type_conf < auto)
         limit = int(config.get("text_chars_for_ai") or 1500)
         snippet = text[:limit]
 
@@ -463,8 +467,12 @@ class Pipeline:
         ds_res: Dict = {}
         with ThreadPoolExecutor(max_workers=2) as ex:
             fj = ex.submit(ai.jev_classify, src.name, folder, snippet, jev_candidates, not sig.locked) if use_jev else None
-            fd = ex.submit(ai.deepseek_analyze, src.name, snippet, cust_short,
-                           S.TYPE_MAP.get(type_code, {}).get("name", "")) if use_ds else None
+            if ask_p or ask_t:
+                fd = ex.submit(ai.deepseek_analyze, src.name, snippet, "", "", 40,
+                               projects if ask_p else None, ask_t, folder)
+            else:
+                fd = ex.submit(ai.deepseek_analyze, src.name, snippet, cust_short,
+                               S.TYPE_MAP.get(type_code, {}).get("name", "")) if use_ds else None
             if fj:
                 try:
                     answers, body, resp, ms = fj.result()
@@ -530,6 +538,17 @@ class Pipeline:
                     type_conf = min(0.75, max(type_conf, p))
                     type_by = "Jev 与关键词不一致"
                 type_rank = [(k, v) for k, v in ranked[:4]]
+        # ---- DeepSeek 的判断
+        ds_used = False
+        if ask_p and ds_res.get("project"):
+            ds_used = self._merge_ds_project(ds_res, sig, projects, pmap, hay_name, text, evidence, cand_probs)
+        if ask_t and ds_res.get("doc_type"):
+            type_code, type_conf, type_by, type_rank, used = self._merge_ds_type(
+                ds_res, type_code, type_conf, type_by, type_rank, evidence)
+            ds_used = ds_used or used
+        if ds_used:
+            # 项目是 DeepSeek 单独认出来的记作「DeepSeek」，其余是在关键词或 Jev 的基础上帮了忙
+            method = "DeepSeek" if method == "关键词" and sig.reason.startswith("DeepSeek") else f"{method}+DeepSeek"
         status = status_kw
         if jev_res.get("status"):
             st, p, _ = ai.choice_top(jev_res["status"])
@@ -548,10 +567,6 @@ class Pipeline:
             raw_title, title_src = src.stem, "原文件名（证据保留原名）"
         elif ds_res.get("title"):
             raw_title, title_src = ds_res["title"], "DeepSeek"
-            if method == "关键词":
-                method = "关键词+DeepSeek"
-            elif method == "Jev":
-                method = "Jev+DeepSeek"
         elif not naming.is_garbage_title(src.stem):
             raw_title = src.stem
             # 文件名里只剩个笼统的叫法（「最终版(2)-评估报告-改」→「评估报告」），正文标题更具体时用正文标题
@@ -586,9 +601,105 @@ class Pipeline:
             "candidates": candidates, "title": title, "title_source": title_src,
             "status": status, "doc_date": doc_date, "summary": ds_res.get("summary", ""),
             "sensitivity": sensitivity, "confidence": conf, "method": method,
-            "evidence": evidence[:8], "errors": errors, "snippet": text[:400],
+            "evidence": evidence[:10], "errors": errors, "snippet": text[:400],
             "batch_label": task.batch_label, "ocr": bool(info.get("ocr") and text.strip()),
         }
+
+    # ------------------------------------------------------------ DeepSeek 判断的合并
+    GENERIC_WORDS = ("股份有限公司", "有限责任公司", "有限公司", "集团", "股份", "公司", "科技", "信息", "技术", "网络",
+                     "中国", "上海", "北京", "深圳", "广州", "杭州", "南京", "苏州", "天津", "重庆", "co.", "ltd", "inc")
+
+    def _ds_evidence_ok(self, ev: str, proj: Dict, hay_name: str, text: str) -> bool:
+        """DeepSeek 给的原文依据：确实出现在文件名/正文里，而且说的就是这个客户（如「青岚集团」对应「青岚医疗」）。"""
+        ev = re.sub(r"\s+", "", ev or "").lower()
+        if len(ev) < 2 or ev not in re.sub(r"\s+", "", f"{hay_name}{text}").lower():
+            return False
+        for nm in {proj.get("customer_short") or "", proj.get("customer_full") or "", *(proj.get("aliases") or [])}:
+            core = nm.lower()
+            for g in self.GENERIC_WORDS:
+                core = core.replace(g, "")
+            core = re.sub(r"[\s()（）·\-_.]", "", core)
+            if len(core) < 2:
+                continue
+            key = core[:4] if core.isascii() else core[:2]
+            if len(key) >= 2 and key in ev:
+                return True
+        return False
+
+    def _merge_ds_project(self, ds: Dict, sig: Signal, projects: List[Dict], pmap: Dict[int, Dict], hay_name: str,
+                          text: str, evidence: List[str], cand_probs: Dict[int, float]) -> bool:
+        """把 DeepSeek 的项目判断并进来，返回它是否起了作用。
+        一致 → 92%；认出客户但分不清项目时由它挑 → 90%；单独认出且原文依据对得上 → 90%，否则最多 80%；
+        和现有结论不一致 → 压到 75% 请人确认。之前已经有分歧（Jev 与关键词不一致）的，不会因为它而自动归档。"""
+        no, dp, ev = ds.get("project"), float(ds.get("project_p") or 0), ds.get("project_evidence") or ""
+        by_no = {x["project_no"]: x["id"] for x in projects}
+        did = by_no.get(no) if no and no != "none" else None
+        if not did:
+            if no == "none" and dp >= 0.7 and sig.project_id:
+                evidence.append("DeepSeek 认为不属于任何候选项目")
+            return False
+        cand_probs.setdefault(did, dp)
+        label = pmap[did]["label"]
+        disputed = "不一致" in (sig.reason or "")
+        if sig.project_id == did:
+            if dp < 0.8:
+                return False
+            sig.conf = min(0.97, max(sig.conf, 0.85 if disputed else 0.92))
+            sig.reason = re.sub(r"，(项目待确认|分不清是哪个项目)$", "", sig.reason or "") + " + DeepSeek 印证"
+            evidence.append(f"DeepSeek 与结论一致（{dp:.0%}）")
+            return True
+        same_cust = sig.project_id and pmap[sig.project_id]["customer_id"] == pmap[did]["customer_id"]
+        if same_cust and sig.conf <= 0.8 and not disputed:
+            # 认出了客户，但分不清是这个客户的哪个项目：让 DeepSeek 按正文内容挑
+            sig.project_id = did
+            sig.conf = 0.9 if dp >= 0.85 else max(sig.conf, round(min(dp, 0.8), 3))
+            base = re.sub(r"，.*$", "", sig.reason or "客户名").replace("（与历史不一致）", "")
+            sig.reason = base + " + DeepSeek 区分项目"
+            evidence.append(f"同一客户有多个项目，DeepSeek 按内容判断为 {label}（{dp:.0%}）")
+            return True
+        if sig.project_id:
+            evidence.append(f"DeepSeek 判断为 {label}（{dp:.0%}），与现有结论不一致，请确认")
+            sig.conf = min(sig.conf, 0.75)
+            sig.reason += "（DeepSeek 不一致）"
+            if did not in sig.candidates:
+                sig.candidates.insert(0, did)
+            return True
+        ok = self._ds_evidence_ok(ev, pmap[did], hay_name, text)
+        sig.project_id, sig.customer_id = did, pmap[did]["customer_id"]
+        sig.conf = 0.9 if (dp >= 0.85 and ok) else round(min(dp, 0.8), 3)
+        sig.reason = f"DeepSeek（依据「{ev}」）" if ok else "DeepSeek"
+        evidence.append(f"DeepSeek 判断项目：{label}（{dp:.0%}）" +
+                        (f"，依据「{ev}」" if ok else "，文件里找不到明确的客户依据，请确认"))
+        return True
+
+    def _merge_ds_type(self, ds: Dict, type_code: str, type_conf: float, type_by: str,
+                       type_rank: List[Tuple[str, float]], evidence: List[str]):
+        t, tp = ds.get("doc_type"), float(ds.get("type_p") or 0)
+        if t not in S.TYPE_MAP:
+            return type_code, type_conf, type_by, type_rank, False
+        if t not in [k for k, _ in type_rank]:
+            type_rank = (type_rank + [(t, round(tp, 3))])[:4]
+        name = S.TYPE_MAP[t]["name"]
+        if t == type_code:
+            if tp < 0.8:
+                return type_code, type_conf, type_by, type_rank, False
+            target = 0.85 if "不一致" in type_by else 0.92
+            return (type_code, min(0.97, max(type_conf, target)), (type_by + " + DeepSeek 印证") if type_by else "DeepSeek",
+                    type_rank, True)
+        if type_conf < 0.5:
+            evidence.append(f"DeepSeek 判断类型：{name}（{tp:.0%}）")
+            rank = [(t, round(tp, 3))] + [(k, v) for k, v in type_rank if k != t][:3]
+            return t, (0.9 if tp >= 0.9 else round(min(tp, 0.8), 3)), "DeepSeek", rank, True
+        rank = [(t, round(tp, 3))] + [(k, v) for k, v in type_rank if k != t][:3]
+        if type_by.startswith("正文关键词") and "不一致" not in type_by and type_conf <= 0.8:
+            # 只是正文里零星出现了某类关键词，DeepSeek 读了内容另有判断：以 DeepSeek 为准
+            old = S.TYPE_MAP.get(type_code, {}).get("name", type_code)
+            evidence.append(f"正文关键词像{old}，DeepSeek 读内容判断为{name}（{tp:.0%}）")
+            if tp >= 0.9:
+                return t, 0.9, "DeepSeek（读正文，覆盖正文关键词）", rank, True
+            return t, round(min(tp, 0.75), 3), "DeepSeek（与正文关键词不一致）", rank, True
+        evidence.append(f"DeepSeek 判断类型为 {name}（{tp:.0%}），与现有结论不一致，请确认")
+        return type_code, min(type_conf, 0.75), type_by + "（DeepSeek 不一致）", type_rank, True
 
     @staticmethod
     def _by_change(by: str, before: Tuple[str, float], after: Tuple[str, float], what: str) -> str:

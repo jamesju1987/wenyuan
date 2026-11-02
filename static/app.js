@@ -103,7 +103,7 @@ const METHOD_TAG = (m) => {
   if (!m) return "";
   if (m.includes("人工")) return `<span class="tag">人工</span>`;
   if (m.includes("Jev")) return `<span class="tag purple">${esc(m)}</span>`;
-  if (m.includes("DeepSeek")) return `<span class="tag blue">${esc(m)}</span>`;
+  if (m.includes("DeepSeek")) return `<span class="tag teal">${esc(m)}</span>`;
   if (m === "已撤销") return `<span class="tag">已撤销</span>`;
   return `<span class="tag blue">${esc(m)}</span>`;
 };
@@ -1336,11 +1336,12 @@ async function renderSettings() {
       <div class="row"><span class="desc grow" id="st-jev-res">关键词判断不出来或有冲突时才调用，单次约 0.1–0.5 秒</span><button class="btn" data-test="jev">测试连接</button></div>
     </div>
 
-    <div class="group-title">${ic("docs")}DeepSeek · 内容分析<span class="more desc" style="color:var(--secondary)">读正文，生成标题、内容日期和摘要</span></div>
+    <div class="group-title">${ic("docs")}DeepSeek · 内容分析<span class="more desc" style="color:var(--secondary)">读正文，判断项目和类型，生成标题、内容日期和摘要</span></div>
     <div class="group">
       <div class="row"><span class="lbl">启用 DeepSeek</span><div class="ctl"><label class="switch"><input type="checkbox" id="st-ds-on" ${s.deepseek_enabled ? "checked" : ""}><span></span></label></div></div>
+      <div class="row"><div class="grow"><div>也判断项目和类型</div><div class="desc">关键词拿不准时，把候选项目清单（客户、项目名称）和正文开头一起发给 DeepSeek，请它独立判断。和关键词一致时把握提高，有分歧时留给你确认</div></div><div class="ctl"><label class="switch"><input type="checkbox" id="st-ds-judge" ${s.deepseek_judge !== false ? "checked" : ""}><span></span></label></div></div>
       <div class="row"><span class="lbl">API Key</span><input class="field grow mono" id="st-ds-key" type="password" value="${esc(s.deepseek_api_key)}" placeholder="在 platform.deepseek.com 创建"></div>
-      <div class="row"><span class="lbl">模型</span><select class="field" id="st-ds-model" style="width:220px">${["deepseek-v4-flash", "deepseek-v4-pro"].map((m) => `<option ${s.deepseek_model === m ? "selected" : ""}>${m}</option>`).join("")}${["deepseek-v4-flash", "deepseek-v4-pro"].includes(s.deepseek_model) ? "" : `<option selected>${esc(s.deepseek_model)}</option>`}</select><span class="desc">flash 快且便宜，适合取标题</span></div>
+      <div class="row"><span class="lbl">模型</span><select class="field" id="st-ds-model" style="width:220px">${["deepseek-v4-flash", "deepseek-v4-pro"].map((m) => `<option ${s.deepseek_model === m ? "selected" : ""}>${m}</option>`).join("")}${["deepseek-v4-flash", "deepseek-v4-pro"].includes(s.deepseek_model) ? "" : `<option selected>${esc(s.deepseek_model)}</option>`}</select><span class="desc">flash 快且便宜；判断拿不准的文件多时可换 pro</span></div>
       <div class="row"><span class="lbl">接口地址</span><input class="field grow mono" id="st-ds-base" value="${esc(s.deepseek_base_url)}"></div>
       <div class="row"><span class="lbl">发送正文长度</span><input class="field" id="st-chars" type="number" min="200" max="6000" step="100" value="${s.text_chars_for_ai}" style="width:90px"><span class="desc">字（只发文件名与正文开头，不上传原文件）</span></div>
       <div class="row"><span class="desc grow" id="st-ds-res">没有配置时，标题取自文件名或文档封面</span><button class="btn" data-test="deepseek">测试连接</button></div>
@@ -1419,6 +1420,7 @@ async function renderSettings() {
   $("#st-watch").addEventListener("change", (e) => save({ watch_enabled: e.target.checked }, e.target.checked ? "已开启自动整理" : "已暂停自动整理"));
   $("#st-jev-on").addEventListener("change", (e) => save({ jev_enabled: e.target.checked }));
   $("#st-ds-on").addEventListener("change", (e) => save({ deepseek_enabled: e.target.checked }));
+  $("#st-ds-judge").addEventListener("change", (e) => save({ deepseek_judge: e.target.checked }));
   for (const [id, key] of [["#st-auto", "auto_threshold"], ["#st-review", "review_threshold"]]) {
     $(id).addEventListener("input", (e) => { $(id + "-v").textContent = e.target.value + "%"; });
     $(id).addEventListener("change", (e) => save({ [key]: Number(e.target.value) / 100 }));
@@ -1445,7 +1447,7 @@ async function renderSettings() {
       const r = await api(`/api/settings/test/${t}`, { method: "POST" });
       res.innerHTML = t === "ocr"
         ? `<span style="color:var(--green)">${ic("check")} 识别正常</span> · ${esc(r.model || "")} · ${r.ms} 毫秒 · 识别出「${esc(r.title || "")}」`
-        : `<span style="color:var(--green)">${ic("check")} 连接成功</span> · ${esc(r.model || "")} · ${r.ms} 毫秒${r.title ? ` · 示例标题「${esc(r.title)}」` : ""}`;
+        : `<span style="color:var(--green)">${ic("check")} 连接成功</span> · ${esc(r.model || "")} · ${r.ms} 毫秒${r.title ? ` · 示例标题「${esc(r.title)}」` : ""}${r.judge === undefined ? "" : r.judge ? ` · 判断项目正确（${Math.round((r.project_p || 0) * 100)}%）` : ` · <span style="color:var(--orange)">示例项目判断不对，可换 pro 模型</span>`}`;
     } catch (e) { res.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; } finally { b.disabled = false; }
   }));
 }

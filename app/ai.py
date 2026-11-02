@@ -1,4 +1,4 @@
-"""模型调用：Jev（快速判断，只做选择题）+ DeepSeek（读正文，生成标题、日期、摘要）。"""
+"""模型调用：Jev（快速判断，只做选择题）+ DeepSeek（读正文，生成标题、日期、摘要；关键词拿不准时也判断项目和类型）。"""
 from __future__ import annotations
 
 import json
@@ -105,22 +105,81 @@ TITLE_PROMPT = """你是项目文档归档助手。阅读文件名和正文开�
 只输出 JSON，不要其他文字。"""
 
 
+JUDGE_PROMPT = """你是项目文档归档助手。阅读文件名、所在文件夹和正文开头，判断文件属于哪个项目、是哪类文档，并生成标题。输出 JSON：
+{"project": "候选项目编号，或 none", "project_confidence": 0到1的小数, "project_evidence": "能证明归属的原文片段",
+ "doc_type": "类型码", "type_confidence": 0到1的小数,
+ "title": "文档标题", "doc_date": "YYYY-MM-DD 或 空字符串", "summary": "一句话摘要"}
+判断规则：
+1. project 只能填候选项目里的项目编号。看不出属于哪个客户或项目时填 none，不要猜。
+2. 先认客户：客户全称、简称、英文名、缩写、系统或产品名称都可以作依据。同一客户有多个项目时，再按正文讲的业务（渗透测试、等保测评、数据安全、攻防演练、驻场运维等）和项目名称区分。
+3. project_evidence 原样摘抄文件名、文件夹或正文里出现的文字（不超过 20 字），最好是客户名称或系统名称；找不到填空字符串。
+4. confidence 如实给：有明确依据 0.9 以上；有一些线索但不确定 0.6 左右；基本靠猜 0.3 以下。
+5. doc_type 只能填下面列出的类型码，选最贴切的一个。
+6. title 不超过 30 个字，格式为「客户简称 + 内容主题」；去掉「最终版」「最新」「终稿」「修改版」「副本」、版本号、日期、项目编号等噪声；不要出现空格、下划线和 \\ / : * ? " < > | 等字符。
+7. doc_date 取报告落款日期、会议日期或文档内容日期；找不到填空字符串，不要编造。summary 不超过 60 个字。
+只输出 JSON，不要其他文字。
+
+类型码（类型码｜名称｜常见关键词）：
+"""
+
+
+def _project_line(p: Dict) -> str:
+    line = f"{p['project_no']}｜客户：{p['customer_short']}"
+    if p.get("customer_full") and p["customer_full"] != p["customer_short"]:
+        line += f"（{p['customer_full']}）"
+    line += f"｜项目：{p['name']}"
+    if p.get("biz_line"):
+        line += f"｜业务线：{p['biz_line']}"
+    if p.get("aliases"):
+        line += f"｜别名：{'、'.join(p['aliases'][:5])}"
+    return line
+
+
+def _conf(v: Any) -> float:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    if x > 1:            # 有时会给成百分数
+        x = x / 100
+    return max(0.0, min(1.0, x))
+
+
 def deepseek_analyze(file_name: str, text: str, customer_short: str = "", type_name: str = "",
-                     timeout: float = 40) -> Tuple[Dict, Dict, Dict, int]:
+                     timeout: float = 40, projects: Optional[List[Dict]] = None, ask_type: bool = False,
+                     folder: str = "") -> Tuple[Dict, Dict, Dict, int]:
+    """默认只生成标题、日期、摘要。传 projects / ask_type 时同一次调用里顺便判断项目、类型
+    （这时不给关键词的结论作提示，让它独立判断）。"""
     key = str(config.get("deepseek_api_key") or "").strip()
     if not key:
         raise AIError("未配置 DeepSeek API Key")
-    hint = []
-    if customer_short:
-        hint.append(f"客户简称：{customer_short}")
-    if type_name:
-        hint.append(f"文档类型：{type_name}")
-    user = f"文件名：{file_name}\n" + ("\n".join(hint) + "\n" if hint else "") + f"正文开头：\n{text or '（无可读正文）'}"
+    judge = bool(projects) or ask_type
+    if judge:
+        system = JUDGE_PROMPT + "\n".join(
+            f"{t['code']}｜{t['name']}｜{'、'.join(t['kw'][:6]) or '无'}" for t in S.TYPE_CODES)
+        parts = []
+        if projects:
+            parts.append("候选项目（项目编号｜客户｜项目｜业务线）：\n" + "\n".join(_project_line(p) for p in projects[:200]))
+        else:
+            parts.append("项目已经确定，project 填 none、project_confidence 填 0 即可。")
+        parts.append(f"文件名：{file_name}")
+        if folder:
+            parts.append(f"所在文件夹：{folder}")
+        parts.append(f"正文开头：\n{text or '（无可读正文）'}")
+        user = "\n\n".join(parts)
+    else:
+        system = TITLE_PROMPT
+        hint = []
+        if customer_short:
+            hint.append(f"客户简称：{customer_short}")
+        if type_name:
+            hint.append(f"文档类型：{type_name}")
+        user = f"文件名：{file_name}\n" + ("\n".join(hint) + "\n" if hint else "") + f"正文开头：\n{text or '（无可读正文）'}"
     body = {
         "model": config.get("deepseek_model") or "deepseek-v4-flash",
-        "messages": [{"role": "system", "content": TITLE_PROMPT}, {"role": "user", "content": user}],
-        "temperature": 0.2,
-        "max_tokens": 300,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "temperature": 0.1 if judge else 0.2,
+        "max_tokens": 500 if judge else 300,
         "response_format": {"type": "json_object"},
     }
     url = str(config.get("deepseek_base_url") or "https://api.deepseek.com").rstrip("/") + "/chat/completions"
@@ -147,6 +206,17 @@ def deepseek_analyze(file_name: str, text: str, customer_short: str = "", type_n
             d = ""
         result = {"title": str(data.get("title") or "").strip(), "doc_date": d,
                   "summary": str(data.get("summary") or "").strip()[:120]}
+        if judge:
+            nos = {p["project_no"] for p in (projects or [])}
+            pj = str(data.get("project") or "").strip()
+            if projects:
+                result["project"] = pj if pj in nos else "none"
+                result["project_p"] = _conf(data.get("project_confidence"))
+                result["project_evidence"] = str(data.get("project_evidence") or "").strip()[:40]
+            if ask_type:
+                tc = str(data.get("doc_type") or "").strip().upper()
+                result["doc_type"] = tc if tc in S.TYPE_MAP else ""
+                result["type_p"] = _conf(data.get("type_confidence"))
         return result, body, resp, int((time.time() - t0) * 1000)
     raise AIError(last or "DeepSeek 调用失败")
 
@@ -177,6 +247,14 @@ def test_jev() -> Dict:
 
 
 def test_deepseek() -> Dict:
-    result, _, resp, ms = deepseek_analyze("澄湾科技等保测评报告-最终版(2).docx",
-                                           "上海澄湾科技有限公司 网络安全等级保护测评报告 2026年10月16日")
-    return {"ok": True, "ms": ms, "model": resp.get("model"), "title": result.get("title")}
+    """顺便试一次判断：两个虚构的候选项目里应该选中等保那个。"""
+    demo = [{"project_no": "TEST-001", "customer_short": "澄湾科技", "customer_full": "上海澄湾科技有限公司",
+             "name": "澄湾科技等保测评2026", "biz_line": "等保"},
+            {"project_no": "TEST-002", "customer_short": "澄湾科技", "customer_full": "上海澄湾科技有限公司",
+             "name": "澄湾科技渗透测试2026", "biz_line": "渗透测试"}]
+    result, _, resp, ms = deepseek_analyze("最终版(2).docx",
+                                           "上海澄湾科技有限公司 网络安全等级保护测评报告 2026年10月16日",
+                                           projects=demo, ask_type=True)
+    return {"ok": True, "ms": ms, "model": resp.get("model"), "title": result.get("title"),
+            "judge": result.get("project") == "TEST-001", "project_p": result.get("project_p"),
+            "doc_type": result.get("doc_type")}
